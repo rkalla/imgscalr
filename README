@@ -2,6 +2,11 @@ imgscalr - Java Image-Scaling Library
 http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 
+License
+-------
+This library is released under the Apache 2 License. See LICENSE.
+
+
 Description
 -----------
 A class implementing performant, good-looking and intelligent image-scaling algorithms
