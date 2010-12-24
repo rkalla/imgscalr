@@ -27,6 +27,31 @@ import java.awt.image.BufferedImage;
  * single scaling operation (even with
  * {@link RenderingHints#VALUE_INTERPOLATION_BICUBIC} interpolation) would
  * produce a much worse-looking result.
+ * <p/>
+ * Minor modifications are made to Campbell's original implementation in the
+ * form of:
+ * <ol>
+ * <li>Instead of accepting a user-supplied interpolation method,
+ * {@link RenderingHints#VALUE_INTERPOLATION_BICUBIC} interpolation is always
+ * used. This was done after A/B comparison testing with large images
+ * down-scaled to thumbnail sizes showed noticeable "blurring" when BILINEAR
+ * interpolation was used. Given that Campbell's algorithm is only used in
+ * QUALITY mode when down-scaling, it was determined that the user's expectation
+ * of a much less blurry picture would require that BICUBIC be the default
+ * interpolation in order to meet the QUALITY expectation.</li>
+ * <li>After each iteration of the do-while loop that incrementally scales the
+ * source image down, an effort is made to explicitly call
+ * {@link BufferedImage#flush()} on the interim temporary {@link BufferedImage}
+ * instances created by the algorithm in an attempt to ensure a more complete GC
+ * cycle by the VM when cleaning up the temporary instances.</li>
+ * <li>Extensive comments have been added to increase readability of the code.</li>
+ * <li>Variable names have been expanded to increase readability of the code.</li>
+ * </ol>
+ * <p/>
+ * <strong>NOTE</strong>: This class does not call {@link BufferedImage#flush()}
+ * on any of the source images passed in by calling code; it is up to the
+ * original caller to dispose of their source images when they are no longer
+ * needed so the VM can most efficiently GC them.
  * 
  * @author Riyad Kalla (software@thebuzzmedia.com)
  */
@@ -296,14 +321,18 @@ public class Scalr {
 					resultGraphics.drawImage(src, 0, 0, targetWidth,
 							targetHeight, null);
 				} else {
+					boolean hasReassignedSrc = false;
+
 					/*
 					 * Using Chris Campbell's incremental scaling algorithm:
 					 * http://today.java.net/pub/a/today/2007/04/03/perils
 					 * -of-image-getscaledinstance.html
 					 * 
-					 * NOTE: Modifications to the original algorithm are var
-					 * names and comments added for clarity and the hard-coding
-					 * of using BICUBIC interpolation.
+					 * NOTE: Modifications to the original algorithm are
+					 * variable names and comments added for clarity and the
+					 * hard-coding of using BICUBIC interpolation as well as the
+					 * explicit "flush()" operation on the interim BufferedImage
+					 * instances to avoid resource leaking.
 					 */
 					do {
 						// If the current width is bigger than our target, cut
@@ -354,9 +383,29 @@ public class Scalr {
 								currentHeight, null);
 						incrementalGraphics.dispose();
 
-						// Treat the incremental image as our new "source image"
-						// for the next iteration through the loop.
+						/*
+						 * Before re-assigning our interim (partially scaled)
+						 * incrementalImage to be the new src image, we want to
+						 * flush() the previous src image IF (and only IF) it
+						 * was one of our own temporary BufferedImages created
+						 * during this incremental down-sampling cycle. If it
+						 * wasn't one of ours, then it was the caller-supplied
+						 * BufferedImage in which case we don't want to flush()
+						 * it.
+						 */
+						if (hasReassignedSrc)
+							src.flush();
+
+						// Now treat our incremental partially scaled image as
+						// the src image and cycle through our loop again to do
+						// another incremental scaling of it (if necessary).
 						src = incrementalImage;
+
+						// Keep track of us re-assigning the original
+						// caller-supplied source image with one of our interim
+						// BufferedImages.
+						if (!hasReassignedSrc)
+							hasReassignedSrc = true;
 					} while (currentWidth != targetWidth
 							|| currentHeight != targetHeight);
 
