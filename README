@@ -1,0 +1,67 @@
+imgscalr - Java Image-Scaling Library
+http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
+
+
+Description
+-----------
+A class implementing performant, good-looking and intelligent image-scaling algorithms
+in pure Java. This class implements the Java2D "best practices" when it comes to
+scaling images as well as Chris Campbell's incremental scaling algorithm proposed
+as the best method for down-sizes images for use as thumbnails (along with some
+additional minor optimizations).
+
+TIP: All resizing operations maintain the original images proportions.
+
+This class attempts to make scaling images in Java as simple as possible by providing
+a handful of approaches tuned for scaling as fast as possible or as best-looking 
+as possible and the ability to let the algorithm choose for you to optionally create 
+the best-looking scaled image as fast as possible without boring you with the details 
+if you don't want them.
+
+
+Example
+-------
+In the simplest use-case where an image needs to be scaled to proportionally fit 
+a specific width (say 150px for a thumbnail) and the class is left to decide which 
+method will look the best, the code would look like this:
+
+<pre>
+BufferedImage srcImage = ImageIO.read(...); // Load image
+BufferedImage scaledImage = Scalr.resize(srcImage, 150); // Scale image
+</pre>
+
+You could even flatten that out further if you simply wanted to scale the image 
+and write out the scaled result immediately to a single line:
+
+<pre>
+ImageIO.write(Scalr.resize(ImageIO.read(...), 150));
+</pre>
+
+
+Troubleshooting
+---------------
+Image-manipulation in Java can take more memory than the size of the source image
+because the image has to be "decoded" into raw ARGB bytes when loaded into the
+BufferedImage instance; fortunately on most platforms this is a hardware-accelerated
+operation by the video card.
+
+If you are running into OutOfMemoryExceptions when using this library (e.g. if you
+dealing with multiple-megabyte source images from a high-MP DSLR) try and up the 
+heap size using the "-Xmx" command line argument to your Java process.
+
+An example of how to do this looks like:
+
+<pre>
+java -Xmx256m com.site.MyApp
+</pre>
+
+
+Reference
+---------
+Chris Campbell Incremental Scaling - http://today.java.net/pub/a/today/2007/04/03/perils-of-image-getscaledinstance.html
+
+
+Contact
+-------
+If you have questions, comments or bug reports for this software please contact
+us at: software@thebuzzmedia.com
