@@ -1,0 +1,33 @@
+<project name="imgscalr Java Library" default="dist">
+	<property name="dir.src" value="src/main/java" />
+	<property name="dir.bin" value="bin" />
+	<property name="dir.dist" value="dist" />
+
+	<property name="name.file" value="imgscalr-lib" />
+	
+	<property name="version.major" value="1" />
+	<property name="version.minor" value="1" />
+
+	<target name="clean">
+		<delete dir="${dir.bin}" />
+		<delete dir="${dir.dist}" />
+	</target>
+
+	<target name="compile" depends="clean">
+		<mkdir dir="${dir.bin}" />
+		<javac srcdir="${dir.src}" destdir="${dir.bin}" source="1.6" />
+		<copy todir="${dir.bin}">
+			<fileset dir="${dir.src}">
+				<exclude name="**/*.java" />
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="dist" depends="compile">
+		<mkdir dir="${dir.dist}" />
+		<jar basedir="${dir.bin}" destfile="${dir.dist}/${name.file}.jar" compress="no" />
+		<copy file="LICENSE" todir="${dir.dist}" />
+		<zip compress="no" basedir="${dir.src}" destfile="${dir.dist}/${name.file}-src.zip" />
+		<zip compress="no" basedir="${dir.dist}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.zip" />
+	</target>
+</project>
