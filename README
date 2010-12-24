@@ -25,17 +25,13 @@ In the simplest use-case where an image needs to be scaled to proportionally fit
 a specific width (say 150px for a thumbnail) and the class is left to decide which 
 method will look the best, the code would look like this:
 
-<pre>
-BufferedImage srcImage = ImageIO.read(...); // Load image
-BufferedImage scaledImage = Scalr.resize(srcImage, 150); // Scale image
-</pre>
+  BufferedImage srcImage = ImageIO.read(...); // Load image
+  BufferedImage scaledImage = Scalr.resize(srcImage, 150); // Scale image
 
 You could even flatten that out further if you simply wanted to scale the image 
 and write out the scaled result immediately to a single line:
 
-<pre>
-ImageIO.write(Scalr.resize(ImageIO.read(...), 150));
-</pre>
+  ImageIO.write(Scalr.resize(ImageIO.read(...), 150));
 
 
 Troubleshooting
@@ -51,10 +47,7 @@ heap size using the "-Xmx" command line argument to your Java process.
 
 An example of how to do this looks like:
 
-<pre>
-java -Xmx256m com.site.MyApp
-</pre>
-
+  java -Xmx256m com.site.MyApp
 
 Reference
 ---------
