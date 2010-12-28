@@ -12,10 +12,12 @@
 	<target name="clean">
 		<delete dir="${dir.bin}" />
 		<delete dir="${dir.dist}" />
+
+		<mkdir dir="${dir.bin}" />
+		<mkdir dir="${dir.dist}" />
 	</target>
 
 	<target name="compile" depends="clean">
-		<mkdir dir="${dir.bin}" />
 		<javac srcdir="${dir.src}" destdir="${dir.bin}" source="1.5" />
 		<copy todir="${dir.bin}">
 			<fileset dir="${dir.src}">
@@ -30,12 +32,18 @@
 		<javadoc sourcepath="${dir.src}" destdir="${dir.javadoc}" author="true" windowtitle="imgscalr v${version.major}.${version.minor} - Java Image Scaling Library" footer="Copyright 2010 The Buzz Media, LLC" link="http://download.oracle.com/javase/6/docs/api" linksource="true" package="true" source="1.5" use="true" />
 	</target>
 
-	<target name="dist" depends="compile,javadoc">
-		<mkdir dir="${dir.dist}" />
-		<jar basedir="${dir.bin}" destfile="${dir.dist}/${name.file}.jar" compress="no" />
+	<target name="jar" depends="compile">
+		<jar basedir="${dir.bin}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.jar" compress="no" />
+	</target>
+
+	<target name="src">
+		<delete file="${dir.dist}/${name.file}-${version.major}.${version.minor}-src.zip" />
+		<zip compress="yes" basedir="${dir.src}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}-src.zip" />
+	</target>
+
+	<target name="dist" depends="compile,javadoc,jar,src">
 		<copy file="README" todir="${dir.dist}" />
 		<copy file="LICENSE" todir="${dir.dist}" />
-		<zip compress="yes" basedir="${dir.src}" destfile="${dir.dist}/${name.file}-src.zip" />
 		<zip compress="yes" basedir="${dir.dist}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.zip" />
 	</target>
 </project>
