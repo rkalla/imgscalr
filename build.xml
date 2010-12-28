@@ -27,7 +27,7 @@
 	<target name="javadoc">
 		<delete dir="${dir.javadoc}" />
 		<mkdir dir="${dir.javadoc}" />
-		<javadoc sourcepath="${dir.src}" destdir="${dir.javadoc}" author="true" windowtitle="imgscalr - Java Image Scaling Library" footer="Copyright 2010 The Buzz Media, LLC" link="http://download.oracle.com/javase/6/docs/api" linksource="true" package="true" source="1.5" use="true" />
+		<javadoc sourcepath="${dir.src}" destdir="${dir.javadoc}" author="true" windowtitle="imgscalr v${version.major}.${version.minor} - Java Image Scaling Library" footer="Copyright 2010 The Buzz Media, LLC" link="http://download.oracle.com/javase/6/docs/api" linksource="true" package="true" source="1.5" use="true" />
 	</target>
 
 	<target name="dist" depends="compile,javadoc">
