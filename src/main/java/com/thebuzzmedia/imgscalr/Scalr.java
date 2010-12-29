@@ -30,6 +30,20 @@ import java.awt.image.BufferedImage;
  * perform those edits before calling one of the <code>resize</code> methods
  * provided by this class.
  * <p/>
+ * In order to maintain the proportionality of the original images, this class
+ * implements the following default behavior:
+ * <ol>
+ * <li>If the image is LANDSCAPE-oriented or SQUARE, treat the
+ * <code>targetWidth</code> as the primary dimension and re-calculate the
+ * <code>targetHeight</code> regardless of what is passed in.</li>
+ * <li>If image is PORTRAIT-oriented, treat the <code>targetHeight</code> as the
+ * primary dimension and re-calculate the <code>targetWidth</code> regardless of
+ * what is passed in.</li>
+ * </ol>
+ * Recalculation of the secondary dimensions is extremely cheap to the point of
+ * it being negligible and this design provides users with better
+ * expected-behavior from the library; which is why this approach was chosen.
+ * <p/>
  * This class implements a few different methods for scaling an image, providing
  * either the best-looking result or the fastest result depending on the scaling
  * hint provided (see {@link Method}).
@@ -64,8 +78,8 @@ import java.awt.image.BufferedImage;
  * </ol>
  * <p/>
  * <strong>NOTE</strong>: This class does not call {@link BufferedImage#flush()}
- * on any of the source images passed in by calling code; it is up to the
- * original caller to dispose of their source images when they are no longer
+ * on any of the <em>source images</em> passed in by calling code; it is up to
+ * the original caller to dispose of their source images when they are no longer
  * needed so the VM can most efficiently GC them.
  * 
  * @author Riyad Kalla (software@thebuzzmedia.com)
@@ -122,8 +136,8 @@ public class Scalr {
 	public static final int AUTOMATIC_THRESHOLD_PX = 800;
 
 	/**
-	 * Resize a given image (maintaining its proportion) to a width and height
-	 * of the given target size using the scaling method of
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height of the given <code>targetSize</code> using the scaling method of
 	 * {@link Method#AUTOMATIC}.
 	 * 
 	 * @param src
@@ -145,8 +159,36 @@ public class Scalr {
 	}
 
 	/**
-	 * Resize a given image (maintaining its proportion) to a width and height
-	 * of the given target size using the given scaling method.
+	 * Resize a given image (maintaining its proportion) to the target width and
+	 * height using the scaling method of {@link Method#AUTOMATIC}.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>targetSize</code> is &lt; 0.
+	 */
+	public static BufferedImage resize(BufferedImage src, int targetWidth,
+			int targetHeight) throws IllegalArgumentException {
+		return resize(src, Method.AUTOMATIC, targetWidth, targetHeight, false,
+				false);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height of the given <code>targetSize</code> using the given scaling
+	 * method.
 	 * 
 	 * @param src
 	 *            The image that will be scaled.
@@ -172,6 +214,11 @@ public class Scalr {
 	/**
 	 * Resize a given image (maintaining its proportion) to the target width and
 	 * height using the given scaling method.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
 	 * 
 	 * @param src
 	 *            The image that will be scaled.
@@ -201,6 +248,11 @@ public class Scalr {
 	 * Resize a given image (maintaining its proportion) to the target width and
 	 * height using the given scaling method and optionally print out
 	 * performance and debugging information while doing it.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
 	 * 
 	 * @param src
 	 *            The image that will be scaled.
@@ -250,31 +302,39 @@ public class Scalr {
 						+ currentHeight + ", Ratio (H/W): " + ratio);
 
 			/*
-			 * The resize operation has to be constrained by the smallest
-			 * dimension (width or height) in order to keep the image
-			 * proportional even if the caller passes in bogus w/h values. For
-			 * example, trying to scale an image from 1600x1200 to 1600x20. In
-			 * order to maintain the correct proportion of the image, the width
-			 * of 1600 will have to be corrected for and the height of 20 used
-			 * as the primary constraint.
+			 * The proportion of the picture must be honored, the way that is
+			 * done is to figure out if the image is in a LANDSCAPE or PORTRAIT
+			 * orientation and depending on its orientation, use the primary
+			 * dimension (width for LANDSCAPE and height for PORTRAIT) to
+			 * recalculate the alternative (height and width respectively) value
+			 * that adheres to the existing ratio.
 			 */
-			if (targetHeight <= targetWidth) {
-				// Height is smaller or equal to width, so calculate a new width
-				// using the height, maintaining the known ratio.
-				targetWidth = Math.round((float) targetHeight / ratio);
+			if (ratio <= 1) {
+				int originalTargetHeight = targetHeight;
 
-				if (printDebugInfo)
-					System.out.println("\tAdjusted targetWidth to "
-							+ targetWidth
-							+ " in order to maintain image proportions");
-			} else {
-				// Width is smaller than height, so calculate a new height using
-				// the width, maintaining the known ratio.
+				/*
+				 * Landscape or Square Orientation: Ignore the given height and
+				 * re-calculate a proportionally correct value based on the
+				 * targetWidth.
+				 */
 				targetHeight = Math.round((float) targetWidth * ratio);
 
-				if (printDebugInfo)
+				if (printDebugInfo && (originalTargetHeight != targetHeight))
 					System.out.println("\tAdjusted targetHeight to "
 							+ targetHeight
+							+ " in order to maintain image proportions");
+			} else {
+				int originalTargetWidth = targetWidth;
+
+				/*
+				 * Portrait: Ignore the given width and re-calculate a
+				 * proportionally correct value based on the targetHeight.
+				 */
+				targetWidth = Math.round((float) targetHeight / ratio);
+
+				if (printDebugInfo && (originalTargetWidth != targetWidth))
+					System.out.println("\tAdjusted targetWidth to "
+							+ targetWidth
 							+ " in order to maintain image proportions");
 			}
 
