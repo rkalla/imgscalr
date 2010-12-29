@@ -1,103 +1,254 @@
+/**   
+ * Copyright 2010 The Buzz Media, LLC
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.thebuzzmedia.imgscalr;
 
-import java.awt.Dimension;
+import static org.junit.Assert.*;
+
 import java.awt.image.BufferedImage;
 
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
 public class ScalrTest {
-	public static final Dimension LANDSCAPE_DIMENSION = new Dimension(1600, 1200);
-	public static final Dimension LANDSCAPE_DOWNSIZED_DIMENSION = new Dimension(320, 240);
-	public static final Dimension LANDSCAPE_UPSIZED_DIMENSION = new Dimension(2560, 1600);
+	private static boolean SHOW_OUTPUT = true;
 
-	public static final Dimension PORTRAIT_DIMENSION = new Dimension(1200, 1600);
-	public static final Dimension PORTRAIT_DOWNSIZED_DIMENSION = new Dimension(240, 320);
-	public static final Dimension PORTRAIT_UPSIZED_DIMENSION = new Dimension(1600, 2650);
+	private static int LANDSCAPE_IMAGE_WIDTH = 800;
+	private static int LANDSCAPE_IMAGE_HEIGHT = 600;
+	private static int LANDSCAPE_IMAGE_TYPE = BufferedImage.TYPE_INT_RGB;
 
-	public static final Dimension SQUARE_DIMENSION = new Dimension(1600, 1600);
-	public static final Dimension SQUARE_DOWNSIZED_DIMENSION = new Dimension(320, 320);
-	public static final Dimension SQUARE_UPSIZED_DIMENSION = new Dimension(2560, 2560);
+	private static int PORTRAIT_IMAGE_WIDTH = LANDSCAPE_IMAGE_HEIGHT;
+	private static int PORTRAIT_IMAGE_HEIGHT = LANDSCAPE_IMAGE_WIDTH;
+	private static int PORTRAIT_IMAGE_TYPE = BufferedImage.TYPE_INT_ARGB;
 
-	public static final float LANDSCAPE_RATIO = (float) LANDSCAPE_DIMENSION.height / (float) LANDSCAPE_DIMENSION
-			.width;
-	public static final float PORTRAIT_RATIO = (float) PORTRAIT_DIMENSION.height / (float) PORTRAIT_DIMENSION.width;
-	public static final float SQUARE_RATIO = (float) SQUARE_DIMENSION.height / (float) SQUARE_DIMENSION.width;
+	private static int LANDSCAPE_TARGET_WIDTH = 320;
+	private static int LANDSCAPE_TARGET_HEIGHT = 240;
 
-	public static final BufferedImage LANDSCAPE_IMAGE = new BufferedImage(LANDSCAPE_DIMENSION.width,
-			LANDSCAPE_DIMENSION.height, BufferedImage.TYPE_INT_RGB);
-	public static final BufferedImage PORTRAIT_IMAGE = new BufferedImage(PORTRAIT_DIMENSION.width,
-			PORTRAIT_DIMENSION.height, BufferedImage.TYPE_INT_RGB);
-	public static final BufferedImage SQUARE_IMAGE = new BufferedImage(SQUARE_DIMENSION.width,
-			SQUARE_DIMENSION.height, BufferedImage.TYPE_INT_RGB);
+	private static int PORTRAIT_TARGET_WIDTH = LANDSCAPE_TARGET_HEIGHT;
+	private static int PORTRAIT_TARGET_HEIGHT = LANDSCAPE_TARGET_WIDTH;
 
-	//TODO: Add tests where width or height is more restrictive (e.g. 1600x200) and ensure the lowest-dimension is used to cap the resize op.
+	private BufferedImage landscapeImage;
+	private BufferedImage portraitImage;
 
-//	@Test
-//	public void downsizeLandscape() {
-//		BufferedImage image = Scalr.resize(LANDSCAPE_IMAGE, LANDSCAPE_DOWNSIZED_DIMENSION.width,
-//				LANDSCAPE_DOWNSIZED_DIMENSION.height, null, false);
-//
-//		assertNotNull(image);
-//		assertEquals(LANDSCAPE_IMAGE.getType(), image.getType());
-//		assertEquals(LANDSCAPE_DOWNSIZED_DIMENSION.width, image.getWidth());
-//		assertEquals(LANDSCAPE_DOWNSIZED_DIMENSION.height, image.getHeight());
-//	}
-//
-//	@Test
-//	public void upsizeLandscape() {
-//		BufferedImage image = Scalr.resize(LANDSCAPE_IMAGE, LANDSCAPE_UPSIZED_DIMENSION.width,
-//				LANDSCAPE_UPSIZED_DIMENSION.height, null, false);
-//
-//		assertNotNull(image);
-//		assertEquals(LANDSCAPE_IMAGE.getType(), image.getType());
-//		assertEquals(LANDSCAPE_UPSIZED_DIMENSION.width, image.getWidth());
-//		assertEquals(LANDSCAPE_UPSIZED_DIMENSION.height, image.getHeight());
-//	}
-//
-//	@Test
-//	public void downsizePortrait() {
-//		BufferedImage image = Scalr.resize(PORTRAIT_IMAGE, PORTRAIT_DOWNSIZED_DIMENSION.width,
-//				PORTRAIT_DOWNSIZED_DIMENSION.height, null, false);
-//
-//		assertNotNull(image);
-//		assertEquals(PORTRAIT_IMAGE.getType(), image.getType());
-//		assertEquals(PORTRAIT_DOWNSIZED_DIMENSION.width, image.getWidth());
-//		assertEquals(PORTRAIT_DOWNSIZED_DIMENSION.height, image.getHeight());
-//	}
-//
-//	@Test
-//	public void upsizePortrait() {
-//		BufferedImage image = Scalr.resize(PORTRAIT_IMAGE, PORTRAIT_UPSIZED_DIMENSION.width,
-//				PORTRAIT_UPSIZED_DIMENSION.height, null, false);
-//
-//		assertNotNull(image);
-//		assertEquals(PORTRAIT_IMAGE.getType(), image.getType());
-//		assertEquals(PORTRAIT_UPSIZED_DIMENSION.width, image.getWidth());
-//		assertEquals(PORTRAIT_UPSIZED_DIMENSION.height, image.getHeight());
-//	}
-//
-//	@Test
-//	public void performanceTest() throws IOException {
-//		for(int i = 0; i < 10; i++) {
-//			BufferedImage image = ImageIO.read(ScalrTest.class.getResourceAsStream("/landscape-huge.jpg"));
-//			long startTime = System.currentTimeMillis();
-//
-//			Scalr.resize(image, 1024, 200, null, false);
-//
-//			System.err.println("Elapse Time: " + (System.currentTimeMillis() - startTime) + "ms");
-//			image.flush();
-//		}
-//
-//		System.out.println("\n\n");
-//
-//		for(int i = 0; i < 10; i++) {
-//			BufferedImage image = ImageIO.read(ScalrTest.class.getResourceAsStream("/landscape-huge.jpg"));
-//			long startTime = System.currentTimeMillis();
-//
-////			Scalr.getScaledInstance(image, 1024, 200, Scalr.DEFAULT_INTERPOLATION_METHOD, true);
-//
-//			System.err.println("Elapse Time: " + (System.currentTimeMillis() - startTime) + "ms");
-//			image.flush();
-//		}
-//	}
+	@Before
+	public void setup() {
+		landscapeImage = new BufferedImage(LANDSCAPE_IMAGE_WIDTH,
+				LANDSCAPE_IMAGE_HEIGHT, LANDSCAPE_IMAGE_TYPE);
+		portraitImage = new BufferedImage(PORTRAIT_IMAGE_WIDTH,
+				PORTRAIT_IMAGE_HEIGHT, PORTRAIT_IMAGE_TYPE);
+	}
 
-	
+	@After
+	public void after() {
+		landscapeImage.flush();
+		portraitImage.flush();
+	}
+
+	/*
+	 * ========================================================================
+	 * METHOD TESTS
+	 * ========================================================================
+	 */
+
+	/**
+	 * Used to test the {@link Scalr#resize(java.awt.image.BufferedImage, int)}
+	 * method.
+	 */
+	@Test
+	public void testResizeBILandscape() {
+		BufferedImage result = Scalr.resize(landscapeImage,
+				LANDSCAPE_TARGET_WIDTH);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testResizeBILandscape: " + result.getWidth()
+					+ "x" + result.getHeight() + " Type: " + result.getType());
+
+		assertNotNull(result);
+		assertEquals(LANDSCAPE_IMAGE_TYPE, result.getType());
+		assertEquals(LANDSCAPE_TARGET_WIDTH, result.getWidth());
+		assertEquals(LANDSCAPE_TARGET_HEIGHT, result.getHeight());
+	}
+
+	/**
+	 * Used to test the {@link Scalr#resize(java.awt.image.BufferedImage, int)}
+	 * method.
+	 */
+	@Test
+	public void testResizeBIPortrait() {
+		BufferedImage result = Scalr.resize(portraitImage,
+				PORTRAIT_TARGET_HEIGHT);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testResizeBIPortrait: " + result.getWidth()
+					+ "x" + result.getHeight() + " Type: " + result.getType());
+
+		assertNotNull(result);
+		assertEquals(PORTRAIT_IMAGE_TYPE, result.getType());
+		assertEquals(PORTRAIT_TARGET_WIDTH, result.getWidth());
+		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getHeight());
+	}
+
+	/**
+	 * Used to test the
+	 * {@link Scalr#resize(java.awt.image.BufferedImage, int, int)} method.
+	 */
+	@Test
+	public void testResizeBIILandscape() {
+		BufferedImage result = Scalr.resize(landscapeImage,
+				LANDSCAPE_TARGET_WIDTH, LANDSCAPE_TARGET_HEIGHT);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testResizeBIILandscape: " + result.getWidth()
+					+ "x" + result.getHeight() + " Type: " + result.getType());
+
+		assertNotNull(result);
+		assertEquals(LANDSCAPE_IMAGE_TYPE, result.getType());
+		assertEquals(LANDSCAPE_TARGET_WIDTH, result.getWidth());
+		assertEquals(LANDSCAPE_TARGET_HEIGHT, result.getHeight());
+	}
+
+	/**
+	 * Used to test the
+	 * {@link Scalr#resize(java.awt.image.BufferedImage, int, int)} method.
+	 */
+	@Test
+	public void testResizeBIIPortrait() {
+		BufferedImage result = Scalr.resize(portraitImage,
+				PORTRAIT_TARGET_WIDTH, PORTRAIT_TARGET_HEIGHT);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testResizeBIIPortrait: " + result.getWidth()
+					+ "x" + result.getHeight() + " Type: " + result.getType());
+
+		assertNotNull(result);
+		assertEquals(PORTRAIT_IMAGE_TYPE, result.getType());
+		assertEquals(PORTRAIT_TARGET_WIDTH, result.getWidth());
+		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getHeight());
+	}
+
+	/**
+	 * Used to test the
+	 * {@link Scalr#resize(java.awt.image.BufferedImage, com.thebuzzmedia.imgscalr.Scalr.Method, int)}
+	 * method.
+	 */
+	public void testResizeBMI() {
+
+	}
+
+	/**
+	 * Used to test the
+	 * {@link Scalr#resize(java.awt.image.BufferedImage, com.thebuzzmedia.imgscalr.Scalr.Method, int, int)}
+	 * method.
+	 */
+	public void testResizeBMII() {
+
+	}
+
+	/**
+	 * Used to test the
+	 * {@link Scalr#resize(java.awt.image.BufferedImage, com.thebuzzmedia.imgscalr.Scalr.Method, int, int, boolean, boolean)}
+	 * method.
+	 */
+	public void testResizeBMIIBB() {
+
+	}
+
+	/*
+	 * ========================================================================
+	 * COMMON SENSE TESTS
+	 * ========================================================================
+	 */
+
+	/**
+	 * "Common Sense" Test: Resize a landscape image (800x600) to 200x200. The
+	 * primary dimension is width because this is a landscape image; height
+	 * should be ignored.
+	 * <p/>
+	 * Expected Result: An image sized 200x150
+	 */
+	@Test
+	public void testLandscapeResizeProportional() {
+		BufferedImage result = Scalr.resize(landscapeImage, 200);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testLandscapeResizeProportional: "
+					+ result.getWidth() + "x" + result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(200, result.getWidth());
+		assertEquals(150, result.getHeight());
+	}
+
+	/**
+	 * "Common Sense" Test: Resize a landscape image (800x600) to 200x10. The
+	 * primary dimension is width because this is a landscape image; height
+	 * should be ignored.
+	 * <p/>
+	 * Expected Result: An image sized 200x150
+	 */
+	@Test
+	public void testLandscapeResizeUnproportional() {
+		BufferedImage result = Scalr.resize(landscapeImage, 200, 10);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testLandscapeResizeUnproportional: "
+					+ result.getWidth() + "x" + result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(200, result.getWidth());
+		assertEquals(150, result.getHeight());
+	}
+
+	/**
+	 * "Common Sense" Test: Resize a portrait image (600x800) to 200x200. The
+	 * primary dimension is height because this is a portrait image; width
+	 * should be ignored.
+	 * <p/>
+	 * Expected Result: An image sized 150x200
+	 */
+	@Test
+	public void testPortraitResizeProportional() {
+		BufferedImage result = Scalr.resize(portraitImage, 200);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testPortraitResizeProportional: "
+					+ result.getWidth() + "x" + result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(150, result.getWidth());
+		assertEquals(200, result.getHeight());
+	}
+
+	/**
+	 * "Common Sense" Test: Resize a portrait image (600x800) to 10x200. The
+	 * primary dimension is height because this is a portrait image; width
+	 * should be ignored.
+	 * <p/>
+	 * Expected Result: An image sized 150x200
+	 */
+	@Test
+	public void testPortraitResizeUnproportional() {
+		BufferedImage result = Scalr.resize(portraitImage, 10, 200);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testPortraitResizeUnproportional: "
+					+ result.getWidth() + "x" + result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(150, result.getWidth());
+		assertEquals(200, result.getHeight());
+	}
 }
