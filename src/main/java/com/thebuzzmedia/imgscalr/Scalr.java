@@ -169,9 +169,10 @@ public class Scalr {
 	 * 
 	 * @param src
 	 *            The image that will be scaled.
-	 * @param targetSize
-	 *            The target width and height (square) that you wish the image
-	 *            to fit within.
+	 * @param targetWidth
+	 *            The target width that you wish the image to have.
+	 * @param targetHeight
+	 *            The target height that you wish the image to have.
 	 * 
 	 * @return the proportionally scaled image with either a width or height of
 	 *         the given target size.
