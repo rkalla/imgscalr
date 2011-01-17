@@ -23,6 +23,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.thebuzzmedia.imgscalr.Scalr.Method;
+
 public class ScalrTest {
 	private static boolean SHOW_OUTPUT = true;
 
@@ -144,8 +146,19 @@ public class ScalrTest {
 	 * {@link Scalr#resize(java.awt.image.BufferedImage, com.thebuzzmedia.imgscalr.Scalr.Method, int)}
 	 * method.
 	 */
+	@Test
 	public void testResizeBMI() {
+		BufferedImage result = Scalr.resize(portraitImage, Method.SPEED,
+				PORTRAIT_TARGET_HEIGHT);
 
+		if (SHOW_OUTPUT)
+			System.out.println("testResizeBMI: " + result.getWidth() + "x"
+					+ result.getHeight() + " Type: " + result.getType());
+
+		assertNotNull(result);
+		assertEquals(PORTRAIT_IMAGE_TYPE, result.getType());
+		assertEquals(PORTRAIT_TARGET_WIDTH, result.getWidth());
+		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getHeight());
 	}
 
 	/**
@@ -153,8 +166,19 @@ public class ScalrTest {
 	 * {@link Scalr#resize(java.awt.image.BufferedImage, com.thebuzzmedia.imgscalr.Scalr.Method, int, int)}
 	 * method.
 	 */
+	@Test
 	public void testResizeBMII() {
+		BufferedImage result = Scalr.resize(portraitImage, Method.SPEED,
+				PORTRAIT_TARGET_WIDTH, PORTRAIT_TARGET_HEIGHT);
 
+		if (SHOW_OUTPUT)
+			System.out.println("testResizeBMII: " + result.getWidth() + "x"
+					+ result.getHeight() + " Type: " + result.getType());
+
+		assertNotNull(result);
+		assertEquals(PORTRAIT_IMAGE_TYPE, result.getType());
+		assertEquals(PORTRAIT_TARGET_WIDTH, result.getWidth());
+		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getHeight());
 	}
 
 	/**
@@ -162,8 +186,19 @@ public class ScalrTest {
 	 * {@link Scalr#resize(java.awt.image.BufferedImage, com.thebuzzmedia.imgscalr.Scalr.Method, int, int, boolean, boolean)}
 	 * method.
 	 */
+	@Test
 	public void testResizeBMIIBB() {
+		BufferedImage result = Scalr.resize(portraitImage, Method.SPEED,
+				PORTRAIT_TARGET_WIDTH, PORTRAIT_TARGET_HEIGHT, true, true);
 
+		if (SHOW_OUTPUT)
+			System.out.println("testResizeBMII: " + result.getWidth() + "x"
+					+ result.getHeight() + " Type: " + result.getType());
+
+		assertNotNull(result);
+		assertEquals(PORTRAIT_IMAGE_TYPE, result.getType());
+		assertEquals(PORTRAIT_TARGET_WIDTH, result.getWidth());
+		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getHeight());
 	}
 
 	/*
