@@ -2,6 +2,29 @@ imgscalr - Java Image-Scaling Library
 http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 
+Changelog
+---------
+
+1.2
+	* Default proportional-scaling logic is more straight forward. If an image is
+	landscape then width is the preferred dimension and the given height is ignored
+	(and recalculated) and visa-versa if the image is portrait oriented. This gives
+	much better "default behavior" results.
+	* Added new convenience method resize(BufferedImage,int,int)
+	* Modified build.xml to output Maven-friendly artifact names.
+	* Library now available from the http://maven.thebuzzmedia.com Maven repo, see
+	"Maven" section on this page for more information:
+	http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
+	* Javadoc is now available on the web at:
+	http://www.thebuzzmedia.com/downloads/software/imgscalr/javadoc/index.html
+	
+	Issues Resolved in 1.2:
+	https://github.com/thebuzzmedia/imgscalr/issuesearch?state=closed&q=release-1.2
+
+1.1
+	* Initial public release.
+
+
 License
 -------
 This library is released under the Apache 2 License. See LICENSE.
