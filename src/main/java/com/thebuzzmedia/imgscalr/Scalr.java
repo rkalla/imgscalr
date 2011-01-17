@@ -299,8 +299,8 @@ public class Scalr {
 			float ratio = ((float) currentHeight / (float) currentWidth);
 
 			if (printDebugInfo)
-				System.out.println("Source Image Size: " + currentWidth + "x"
-						+ currentHeight + ", Ratio (H/W): " + ratio);
+				System.out.println("Source Image: size=" + currentWidth + "x"
+						+ currentHeight + ", ratio (H/W)=" + ratio);
 
 			/*
 			 * The proportion of the picture must be honored, the way that is
@@ -479,7 +479,8 @@ public class Scalr {
 
 						// Keep track of us re-assigning the original
 						// caller-supplied source image with one of our interim
-						// BufferedImages.
+						// BufferedImages so we know when to explicitly flush
+						// the interm "src" on the next cycle through.
 						if (!hasReassignedSrc)
 							hasReassignedSrc = true;
 					} while (currentWidth != targetWidth

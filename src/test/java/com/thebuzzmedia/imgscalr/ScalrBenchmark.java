@@ -18,7 +18,7 @@ public class ScalrBenchmark {
 		BufferedImage image = null;
 
 		try {
-			image = ImageIO.read(ScalrTest.class.getResourceAsStream("/landscape-huge-2.jpg"));
+			image = ImageIO.read(ScalrBenchmark.class.getResourceAsStream("/landscape-huge-2.jpg"));
 		} catch (IOException e) {
 			e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
 		}
@@ -30,7 +30,7 @@ public class ScalrBenchmark {
 		BufferedImage image = null;
 
 		try {
-			image = ImageIO.read(ScalrTest.class.getResourceAsStream("/portrait-large.jpg"));
+			image = ImageIO.read(ScalrBenchmark.class.getResourceAsStream("/portrait-large.jpg"));
 		} catch (IOException e) {
 			e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
 		}
@@ -42,7 +42,7 @@ public class ScalrBenchmark {
 		BufferedImage image = null;
 
 		try {
-			image = ImageIO.read(ScalrTest.class.getResourceAsStream("/portrait-huge.jpg"));
+			image = ImageIO.read(ScalrBenchmark.class.getResourceAsStream("/portrait-huge.jpg"));
 		} catch (IOException e) {
 			e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
 		}
