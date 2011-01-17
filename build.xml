@@ -48,8 +48,6 @@
 		<copy file="LICENSE" todir="${dir.dist}" />
 		
 		<jar compress="yes" basedir="${dir.javadoc}" destfile="${dir.dist}/${name.file.javadoc}" />
-		<delete dir="${dir.javadoc}" />
-		
 		<zip compress="yes" basedir="${dir.dist}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.zip" />
 	</target>
 </project>
