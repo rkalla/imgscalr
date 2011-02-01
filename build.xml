@@ -4,8 +4,8 @@
 	<property name="dir.dist" value="dist" />
 	<property name="dir.javadoc" value="${dir.dist}/javadoc" />
 	
-	<property name="version.major" value="1" />
-	<property name="version.minor" value="2" />
+	<property name="version.major" value="2" />
+	<property name="version.minor" value="0" />
 
 	<property name="name.file" value="imgscalr-lib" />
 	<property name="name.file.javadoc" value="${name.file}-${version.major}.${version.minor}-javadoc.jar" />

@@ -27,6 +27,7 @@ Changelog
 	how long it is taking to do each scale operation.
 	* When AUTOMATIC method is specified, the API is more intelligent about selecting
 	SPEED, BALANCED or QUALITY based on the images primary dimension only (more accurate).
+	* Copious amounts of Javadoc added to new methods, new code and existing code. 
 	
 	Issues Resolved in 2.0:
 	https://github.com/thebuzzmedia/imgscalr/issues/closed
@@ -103,13 +104,6 @@ An example of how to do this looks like:
 
   java -Xmx128m com.site.MyApp
   
-As an example, working with some example test images from a Canon 5D Mark II 
-(21 megapixel, 6 MB on disk) I only had to set my heap to 128 to get my worst-case,
-test-case to pass. The test cases takes the image and scales it in every quality 
-to 8 or 9 different resolutions, creating roughly 30+ versions of the image in one
-run. The purpose of the test is to look for memory leaks which would explode
-memory usage well towards 1 GB if there are any (then I can spot them faster).
-
 
 Reference
 ---------
