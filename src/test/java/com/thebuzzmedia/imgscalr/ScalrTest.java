@@ -181,26 +181,6 @@ public class ScalrTest {
 		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getHeight());
 	}
 
-	/**
-	 * Used to test the
-	 * {@link Scalr#resize(java.awt.image.BufferedImage, com.thebuzzmedia.imgscalr.Scalr.Method, int, int, boolean, boolean)}
-	 * method.
-	 */
-	@Test
-	public void testResizeBMIIBB() {
-		BufferedImage result = Scalr.resize(portraitImage, Method.SPEED,
-				PORTRAIT_TARGET_WIDTH, PORTRAIT_TARGET_HEIGHT, true, true);
-
-		if (SHOW_OUTPUT)
-			System.out.println("testResizeBMII: " + result.getWidth() + "x"
-					+ result.getHeight() + " Type: " + result.getType());
-
-		assertNotNull(result);
-		assertEquals(PORTRAIT_IMAGE_TYPE, result.getType());
-		assertEquals(PORTRAIT_TARGET_WIDTH, result.getWidth());
-		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getHeight());
-	}
-
 	/*
 	 * ========================================================================
 	 * COMMON SENSE TESTS

@@ -18,6 +18,8 @@ package com.thebuzzmedia.imgscalr;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Class used to implement performant, good-quality and intelligent image
@@ -81,10 +83,68 @@ import java.awt.image.BufferedImage;
  * on any of the <em>source images</em> passed in by calling code; it is up to
  * the original caller to dispose of their source images when they are no longer
  * needed so the VM can most efficiently GC them.
+ * <p/>
+ * <strong>Logging</strong>: This class implements all its debug logging via the
+ * {@link Logger} JDK logging class. All logging is done with a log-level of
+ * {@link Level#INFO} and logging output can be enabled by setting the system
+ * property "<code>imgscalr.debug</code>" to <code>true</code>. Read the
+ * definition of the {@link LOGGER} instance for more information on debugging
+ * output and log configuration.
  * 
  * @author Riyad Kalla (software@thebuzzmedia.com)
  */
 public class Scalr {
+	/**
+	 * Flag used to indicate if debugging output has been enabled by setting the
+	 * "imgscalr.debug" system property to <code>true</code>. This value will be
+	 * <code>false</code> if the "imgscalr.debug" system property is undefined
+	 * or set to <code>false</code>.
+	 * <p/>
+	 * This system property can be set on startup like so:<br/>
+	 * <code>
+	 * -Dimgscalr.debug=true
+	 * </code>
+	 */
+	public static final boolean DEBUG = Boolean.getBoolean("imgscalr.debug");
+
+	/**
+	 * Prefix to every log message this library logs. Using a well-defined
+	 * prefix helps make it easier both visually and programatically to scan log
+	 * files for messages produced by this library.
+	 */
+	public static final String LOG_MESSAGE_PREFX = "[imgscalr] ";
+
+	// TODO: Remove the logger use and go back to System.out until it is asked
+	// for by users -- makes output harder to parse cause of goddamn timestamps.
+
+	/**
+	 * Logger used by the imgscalr library for logging all output.
+	 * <p/>
+	 * In order to see debugging output from this library, the system property "
+	 * <code>imgscalr.debug</code>" must be set to <code>true</code>.
+	 * <p/>
+	 * When that system property is <code>true</code>, logging is enabled AND
+	 * this logger's {@link Level} is forcibly adjusted down to
+	 * {@link Level#INFO} if it is currently set higher (e.g. WARNING) and not
+	 * capable of logging the INFO-level messages this library produces.
+	 */
+	public static final Logger LOGGER = Logger.getLogger(Scalr.class.getName());
+
+	/**
+	 * Static initializer used to init the {@link #LOGGER} if the {@link #DEBUG}
+	 * flag has been set to ensure that debug messages can be logged from this
+	 * library. This is done by forcibly adjusting the <code>LOGGER</code>'s
+	 * level to {@link Level#INFO} if the <code>LEVEL</code> currently set would
+	 * not allow <code>INFO</code>-level messages to be logged.
+	 */
+	static {
+		if (DEBUG)
+			log("Debug output ENABLED");
+		// if (DEBUG && !LOGGER.isLoggable(Level.INFO)) {
+		// LOGGER.setLevel(Level.INFO);
+		// }
+	}
+
 	/**
 	 * Used to define the different scaling hints that the algorithm can prefer.
 	 */
@@ -92,21 +152,36 @@ public class Scalr {
 		/**
 		 * Used to indicate that the scaling implementation should decide which
 		 * method to use in order to get the best looking scaled image in the
-		 * least amount of time. When scaling an image down in size, this method
-		 * takes advantage of the fact that scaling an image to 800px or bigger
-		 * looks roughly the same whether the SPEED or QUALITY method are used
-		 * while scaling an image smaller than that needs to be scaled using the
-		 * QUALITY method in order to keep it looking good. Most users simply
-		 * looking for a "good" result are meant to use this method.
+		 * least amount of time.
+		 * <p/>
+		 * The scaling algorithm will use the
+		 * {@link Scalr#QUALITY_BALANCED_THRESHOLD_PX} or
+		 * {@link Scalr#BALANCED_SPEED_THRESHOLD_PX} thresholds as cut-offs to
+		 * decide between selecting the <code>QUALITY</code>,
+		 * <code>BALANCED</code> or <code>SPEED</code> scaling algorithms.
+		 * <p/>
+		 * By default the thresholds chosen will give nearly the best looking
+		 * result in the fastest amount of time. We intent this method to work
+		 * for 80% of people looking to scale an image quickly and get a good
+		 * looking result.
 		 */
 		AUTOMATIC,
 		/**
 		 * Used to indicate that the scaling implementation should scale as fast
-		 * as possible and return a result. For smaller images (below 800px in
-		 * size) this can result in noticeable aliasing but it can be a few
-		 * magnitudes times faster than using the QUALITY method.
+		 * as possible and return a result. For smaller images (800px in size)
+		 * this can result in noticeable aliasing but it can be a few magnitudes
+		 * times faster than using the QUALITY method.
 		 */
 		SPEED,
+		/**
+		 * Used to indicate that the scaling implementation should use a scaling
+		 * operation balanced between SPEED and QUALITY. Sometimes SPEED looks
+		 * too low quality to be useful (e.g. text can become unreadable when
+		 * scaled using SPEED) but using QUALITY mode will increase the
+		 * processing time too much. This mode provides a "better than SPEED"
+		 * quality in a "less than QUALITY" amount of time.
+		 */
+		BALANCED,
 		/**
 		 * Used to indicate that the scaling implementation should do everything
 		 * it can to create as nice of a result as possible. This approach is
@@ -117,23 +192,46 @@ public class Scalr {
 		 * automatically prefer the QUALITY method when scaling an image down
 		 * below 800px in size.
 		 */
-		QUALITY
+		QUALITY;
 	}
 
 	/**
-	 * Threshold in pixels (width or height) at which point a scaling operation
-	 * using the "AUTOMATIC" method will use to decide if an image should use
-	 * the SPEED method (if bigger than threshold) or the QUALITY method (if
-	 * smaller than threshold). This was based on A/B testing with images
-	 * processed with the two algorithms and noticing right around an image size
-	 * of 800x600 or larger where the difference in quality is negligible when
-	 * using the more expensive QUALITY method. While this is a relatively
-	 * arbitrary number (no mathematics to back it up) it should provide a good
-	 * default in most use-cases. Users that are not seeing the results they
-	 * need can perform their own pre-calculation and then request either a
-	 * SPEED or QUALITY scaling approach.
+	 * Threshold (in pixels) at which point the scaling operation using the
+	 * {@link Method#AUTOMATIC} method will decide if a {@link Method#QUALITY}
+	 * method will be used (if smaller than or equal to threshold) or a
+	 * {@link Method#BALANCED} method will be used (if larger than threshold).
+	 * <p/>
+	 * The bigger the image is being scaled to, the less noticeable degradations
+	 * in the image becomes and the faster algorithms can be selected.
+	 * <p/>
+	 * The value of this threshold (700) was chosen after visual, by-hand, A/B
+	 * testing between different types of images scaled with this library; both
+	 * photographs and screenshots. It was determined that images below this
+	 * size need to use a {@link Method#QUALITY} scale method to look decent in
+	 * most all cases while using the faster {@link Method#BALANCED} method for
+	 * images bigger than this threshold showed no noticeable degradation over a
+	 * <code>QUALITY</code> scale.
 	 */
-	public static final int AUTOMATIC_THRESHOLD_PX = 800;
+	public static final int QUALITY_BALANCED_THRESHOLD_PX = 700;
+
+	/**
+	 * Threshold (in pixels) at which point the scaling operation using the
+	 * {@link Method#AUTOMATIC} method will decide if a {@link Method#BALANCED}
+	 * method will be used (if smaller than or equal to threshold) or a
+	 * {@link Method#SPEED} method will be used (if larger than threshold).
+	 * <p/>
+	 * The bigger the image is being scaled to, the less noticeable degradations
+	 * in the image becomes and the faster algorithms can be selected.
+	 * <p/>
+	 * The value of this threshold (1600) was chosen after visual, by-hand, A/B
+	 * testing between different types of images scaled with this library; both
+	 * photographs and screenshots. It was determined that images below this
+	 * size need to use a {@link Method#BALANCED} scale method to look decent in
+	 * most all cases while using the faster {@link Method#SPEED} method for
+	 * images bigger than this threshold showed no noticeable degradation over a
+	 * <code>BALANCED</code> scale.
+	 */
+	public static final int BALANCED_SPEED_THRESHOLD_PX = 1600;
 
 	/**
 	 * Resize a given image (maintaining its original proportion) to a width and
@@ -154,8 +252,7 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetSize)
 			throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, targetSize, targetSize, false,
-				false);
+		return resize(src, Method.AUTOMATIC, targetSize, targetSize);
 	}
 
 	/**
@@ -182,8 +279,7 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetWidth,
 			int targetHeight) throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, targetWidth, targetHeight, false,
-				false);
+		return resize(src, Method.AUTOMATIC, targetWidth, targetHeight);
 	}
 
 	/**
@@ -209,7 +305,7 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
 			int targetSize) throws IllegalArgumentException {
-		return resize(src, scalingMethod, targetSize, targetSize, false, false);
+		return resize(src, scalingMethod, targetSize, targetSize);
 	}
 
 	/**
@@ -241,48 +337,6 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
 			int targetWidth, int targetHeight) throws IllegalArgumentException {
-		return resize(src, scalingMethod, targetWidth, targetHeight, false,
-				false);
-	}
-
-	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height using the given scaling method and optionally print out
-	 * performance and debugging information while doing it.
-	 * <p/>
-	 * <strong>TIP</strong>: See the class description to understand how this
-	 * class handles recalculation of the <code>targetWidth</code> or
-	 * <code>targetHeight</code> depending on the image's orientation in order
-	 * to maintain the original proportion.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param targetWidth
-	 *            The target width that you wish the image to have.
-	 * @param targetHeight
-	 *            The target height that you wish the image to have.
-	 * @param printDebugInfo
-	 *            Used to indicate if debugging information should be printed
-	 *            out during the scaling operation. Can be useful for
-	 *            troubleshooting.
-	 * @param printElapseTimes
-	 *            Used to indicate if performance metrics (elapse times) should
-	 *            be printed out during the scaling operation.
-	 * 
-	 * @return the proportionally scaled image no bigger than the given width
-	 *         and height.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code>, if
-	 *             <code>targetWidth</code> is &lt; 0 or if
-	 *             <code>targetHeight</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			int targetWidth, int targetHeight, boolean printDebugInfo,
-			boolean printElapseTimes) throws IllegalArgumentException {
 		if (scalingMethod == null)
 			throw new IllegalArgumentException("scalingMethod cannot be null");
 		if (targetWidth < 0)
@@ -290,27 +344,36 @@ public class Scalr {
 		if (targetHeight < 0)
 			throw new IllegalArgumentException("targetHeight must be >= 0");
 
+		long startTime = System.currentTimeMillis();
 		BufferedImage result = null;
 
+		// Make sure we have something to do first.
 		if (src != null) {
-			long startTime = System.currentTimeMillis();
 			int currentWidth = src.getWidth();
 			int currentHeight = src.getHeight();
 			float ratio = ((float) currentHeight / (float) currentWidth);
 
-			if (printDebugInfo)
-				System.out.println("Source Image: size=" + currentWidth + "x"
-						+ currentHeight + ", ratio (H/W)=" + ratio);
+			if (DEBUG)
+				log("Resizing Source Image [size=%dx%d, orientation=%s, ratio(H/W)=%f] to [targetSize=%dx%d]",
+						currentWidth, currentHeight,
+						(ratio <= 1 ? "landscape/square" : "portrait"), ratio,
+						targetWidth, targetHeight);
 
 			/*
 			 * The proportion of the picture must be honored, the way that is
-			 * done is to figure out if the image is in a LANDSCAPE or PORTRAIT
-			 * orientation and depending on its orientation, use the primary
-			 * dimension (width for LANDSCAPE and height for PORTRAIT) to
-			 * recalculate the alternative (height and width respectively) value
-			 * that adheres to the existing ratio.
+			 * done is to figure out if the image is in a LANDSCAPE/SQUARE or
+			 * PORTRAIT orientation and depending on its orientation, use the
+			 * primary dimension (width for LANDSCAPE/SQUARE and height for
+			 * PORTRAIT) to recalculate the alternative (height and width
+			 * respectively) value that adheres to the existing ratio. This
+			 * helps make life easier for the caller as they don't need to
+			 * pre-compute proportional dimensions before calling the API, they
+			 * can just specify the dimensions they would like the image to
+			 * roughly fit within and it will do the right thing without
+			 * mangling the result.
 			 */
 			if (ratio <= 1) {
+				// Save for detailed logging (this is cheap).
 				int originalTargetHeight = targetHeight;
 
 				/*
@@ -320,183 +383,322 @@ public class Scalr {
 				 */
 				targetHeight = Math.round((float) targetWidth * ratio);
 
-				if (printDebugInfo && (originalTargetHeight != targetHeight))
-					System.out.println("\tAdjusted targetHeight to "
-							+ targetHeight
-							+ " in order to maintain image proportions");
+				if (DEBUG && originalTargetHeight != targetHeight)
+					log("Auto-Corrected targetHeight [from=%d to=%d] to honor image proportions",
+							originalTargetHeight, targetHeight);
 			} else {
+				// Save for detailed logging (this is cheap).
 				int originalTargetWidth = targetWidth;
 
 				/*
-				 * Portrait: Ignore the given width and re-calculate a
-				 * proportionally correct value based on the targetHeight.
+				 * Portrait Orientation: Ignore the given width and re-calculate
+				 * a proportionally correct value based on the targetHeight.
 				 */
 				targetWidth = Math.round((float) targetHeight / ratio);
 
-				if (printDebugInfo && (originalTargetWidth != targetWidth))
-					System.out.println("\tAdjusted targetWidth to "
-							+ targetWidth
-							+ " in order to maintain image proportions");
+				if (DEBUG && originalTargetWidth != targetWidth)
+					log("Auto-Corrected targetWidth [from=%d to=%d] to honor image proportions",
+							originalTargetWidth, targetWidth);
 			}
 
-			/*
-			 * Using an AUTOMATIC method we look at the image and see if either
-			 * of its dimensions are larger than our threshold value we
-			 * determined is the cutoff point where the visual difference
-			 * between the SPEED method and QUALITY method are negligible at
-			 * which point we use the SPEED method instead to save time. If the
-			 * width and height are smaller than that value, then we use the
-			 * QUALITY method to ensure a good looking picture. In the case of
-			 * scaling-up, we never use the Campbell algorithm even if we are
-			 * doing a QUALITY scale operation and will instead use a single
-			 * BICUBIC interpolation which is much faster than multiple scale
-			 * iterations up-wards.
-			 */
-			if (scalingMethod == Scalr.Method.AUTOMATIC) {
-				if (targetWidth < AUTOMATIC_THRESHOLD_PX
-						&& targetHeight < AUTOMATIC_THRESHOLD_PX)
-					scalingMethod = Scalr.Method.QUALITY;
-				else
-					scalingMethod = Scalr.Method.SPEED;
+			// If AUTOMATIC was specified, determine the real scaling method.
+			if (scalingMethod == Scalr.Method.AUTOMATIC)
+				scalingMethod = determineScalingMethod(targetWidth,
+						targetHeight, ratio);
 
-				if (printDebugInfo)
-					System.out
-							.println("Method AUTOMATIC Specified, Selecting: "
-									+ scalingMethod.name());
-			}
+			if (DEBUG)
+				log("Scaling Image to [size=%dx%d] using the %s method...",
+						targetWidth, targetHeight, scalingMethod);
 
 			// Now we scale the image
 			if (scalingMethod == Scalr.Method.SPEED) {
-				result = new BufferedImage(targetWidth, targetHeight,
-						src.getType());
-				Graphics2D resultGraphics = result.createGraphics();
-
-				resultGraphics.setRenderingHint(
-						RenderingHints.KEY_INTERPOLATION,
+				result = scaleImage(src, targetWidth, targetHeight,
 						RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-				resultGraphics.drawImage(src, 0, 0, targetWidth, targetHeight,
-						null);
+			} else if (scalingMethod == Scalr.Method.BALANCED) {
+				result = scaleImage(src, targetWidth, targetHeight,
+						RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 			} else if (scalingMethod == Scalr.Method.QUALITY) {
 				/*
-				 * If we are scaling up, directly using a single BICUBIC will
+				 * If we are scaling up (in either width or height - since we
+				 * know the image will stay proportional we just check if either
+				 * are being scaled up), directly using a single BICUBIC will
 				 * give us better results then using Chris Campbell's
-				 * incremental scaling operation. If we are scaling down, we
-				 * must use the incremental scaling algorithm for the best
-				 * result.
+				 * incremental scaling operation (and take a lot less time). If
+				 * we are scaling down, we must use the incremental scaling
+				 * algorithm for the best result.
 				 */
-				if (targetWidth > currentWidth && targetHeight > currentHeight) {
-					result = new BufferedImage(targetWidth, targetHeight,
-							src.getType());
-					Graphics2D resultGraphics = result.createGraphics();
-
-					// BICUBIC gives us the best results when scaling up in a
-					// single operation.
-					resultGraphics.setRenderingHint(
-							RenderingHints.KEY_INTERPOLATION,
-							RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-					resultGraphics.drawImage(src, 0, 0, targetWidth,
-							targetHeight, null);
-				} else {
-					boolean hasReassignedSrc = false;
+				if (targetWidth > currentWidth || targetHeight > currentHeight) {
+					log("\tQUALITY Up-scale, single BICUBIC will be used...");
 
 					/*
-					 * Using Chris Campbell's incremental scaling algorithm:
-					 * http://today.java.net/pub/a/today/2007/04/03/perils
-					 * -of-image-getscaledinstance.html
-					 * 
-					 * NOTE: Modifications to the original algorithm are
-					 * variable names and comments added for clarity and the
-					 * hard-coding of using BICUBIC interpolation as well as the
-					 * explicit "flush()" operation on the interim BufferedImage
-					 * instances to avoid resource leaking.
+					 * BILINEAR and BICUBIC look similar the smaller the scale
+					 * jump upwards is, if the scale is larger BICUBIC looks
+					 * sharper and less fuzzy. But most importantly we have to
+					 * use BICUBIC to match the contract of the QUALITY
+					 * rendering method. This note is just here for anyone
+					 * reading the code and wondering how they can speed their
+					 * own calls up.
 					 */
-					do {
-						// If the current width is bigger than our target, cut
-						// it in half and sample again.
-						if (currentWidth > targetWidth) {
-							currentWidth /= 2;
+					result = scaleImage(src, targetWidth, targetHeight,
+							RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+				} else {
+					log("\tQUALITY Down-scale, incremental algorithm will be used...");
 
-							// If we cut the width too far it means we are on
-							// our last sampling step. Just set
-							// it to the target width and finish up.
-							if (currentWidth < targetWidth)
-								currentWidth = targetWidth;
-						}
-
-						// If the current height is bigger than our target, cut
-						// it in half and sample again.
-						if (currentHeight > targetHeight) {
-							currentHeight /= 2;
-
-							// If we cut the height too far it means we are on
-							// our last sampling step. Just set
-							// it to the target height and finish up.
-							if (currentHeight < targetHeight)
-								currentHeight = targetHeight;
-						}
-
-						BufferedImage incrementalImage = new BufferedImage(
-								currentWidth, currentHeight, src.getType());
-						Graphics2D incrementalGraphics = incrementalImage
-								.createGraphics();
-
-						/*
-						 * Originally we wanted to use BILINEAR interpolation
-						 * here because it takes 1/3rd the time that the BICUBIC
-						 * interpolation does, however, when scaling large
-						 * images down to most sizes bigger than a thumbnail we
-						 * witnessed Noticeable "softening" in the resultant
-						 * image with BILINEAR that would be unexpectedly
-						 * annoying to a user expecting a "QUALITY" scale of
-						 * their original image. Instead BICUBIC was chosen to
-						 * honor the contract of a QUALITY scale of the original
-						 * image.
-						 */
-						incrementalGraphics.setRenderingHint(
-								RenderingHints.KEY_INTERPOLATION,
-								RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-						incrementalGraphics.drawImage(src, 0, 0, currentWidth,
-								currentHeight, null);
-						incrementalGraphics.dispose();
-
-						/*
-						 * Before re-assigning our interim (partially scaled)
-						 * incrementalImage to be the new src image, we want to
-						 * flush() the previous src image IF (and only IF) it
-						 * was one of our own temporary BufferedImages created
-						 * during this incremental down-sampling cycle. If it
-						 * wasn't one of ours, then it was the caller-supplied
-						 * BufferedImage in which case we don't want to flush()
-						 * it.
-						 */
-						if (hasReassignedSrc)
-							src.flush();
-
-						// Now treat our incremental partially scaled image as
-						// the src image and cycle through our loop again to do
-						// another incremental scaling of it (if necessary).
-						src = incrementalImage;
-
-						// Keep track of us re-assigning the original
-						// caller-supplied source image with one of our interim
-						// BufferedImages so we know when to explicitly flush
-						// the interm "src" on the next cycle through.
-						if (!hasReassignedSrc)
-							hasReassignedSrc = true;
-					} while (currentWidth != targetWidth
-							|| currentHeight != targetHeight);
-
-					// Once the loop has exited, the source image argument is
-					// now our scaled result image that we want to return.
-					result = src;
+					/*
+					 * Originally we wanted to use BILINEAR interpolation here
+					 * because it takes 1/3rd the time that the BICUBIC
+					 * interpolation does, however, when scaling large images
+					 * down to most sizes bigger than a thumbnail we witnessed
+					 * noticeable "softening" in the resultant image with
+					 * BILINEAR that would be unexpectedly annoying to a user
+					 * expecting a "QUALITY" scale of their original image.
+					 * Instead BICUBIC was chosen to honor the contract of a
+					 * QUALITY scale of the original image.
+					 */
+					result = scaleImageIncrementally(src, targetWidth,
+							targetHeight,
+							RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 				}
 			}
 
-			if (printElapseTimes)
-				System.out.println("Image Scaled in "
-						+ (System.currentTimeMillis() - startTime) + "ms");
-		}
+			if (DEBUG) {
+				long elapsedTime = System.currentTimeMillis() - startTime;
+				log("Source Image Scaled from [%dx%d] to [%dx%d] in %d ms (approx %f seconds)",
+						currentWidth, currentHeight, targetWidth, targetHeight,
+						elapsedTime, (double) elapsedTime / (double) 1000);
+			}
+		} else
+			log("No Source Image Specified, exiting...");
 
 		return result;
+	}
+
+	/**
+	 * Helper method used to ensure a message is loggable before it is logged
+	 * and then pre-pend a universal prefix to all log messages generated by
+	 * this library.
+	 * <p/>
+	 * If a message cannot be logged (logging is disabled or the {@link #LOGGER}
+	 * 's level won't allow it) then this method returns immediately.
+	 * <p/>
+	 * Because Java will auto-box primitive arguments into Objects when building
+	 * out the <code>params</code> array, care should be taken not to call this
+	 * method with primitive values unless {@link #DEBUG} is <code>true</code>;
+	 * otherwise the VM will be spending time performing unnecessary auto-boxing
+	 * calculations.
+	 * 
+	 * @param message
+	 *            The log message in <a href=
+	 *            "http://download.oracle.com/javase/6/docs/api/java/util/Formatter.html#syntax"
+	 *            >format string syntax</a> that will be logged.
+	 * @param params
+	 *            The parameters that will be swapped into all the place holders
+	 *            in the original messages before being logged.
+	 */
+	protected static void log(String message, Object... params) {
+		if (DEBUG)
+			System.out.printf(LOG_MESSAGE_PREFX + message + '\n', params);
+		// LOGGER.log(Level.INFO, LOG_MESSAGE_PREFX + message, params);
+	}
+
+	/**
+	 * Used to determine the scaling {@link Method} that is best suited for
+	 * scaling the image to the targeted dimensions.
+	 * <p/>
+	 * This method is intended to be used to select a specific scaling
+	 * {@link Method} when a {@link Method#AUTOMATIC} method is specified. This
+	 * method utilizes the {@link #QUALITY_BALANCED_THRESHOLD_PX} and
+	 * {@link #BALANCED_SPEED_THRESHOLD_PX} thresholds when selecting which
+	 * method should be used by comparing the primary dimension (width or
+	 * height) against the threshold and seeing where the image falls. The
+	 * primary dimension is determined by looking at the orientation of the
+	 * image: landscape or square images use their width and portrait-oriented
+	 * images use their height.
+	 * 
+	 * @param targetWidth
+	 *            The target width for the scaled image.
+	 * @param targetHeight
+	 *            The target height for the scaled image.
+	 * @param ratio
+	 *            A height/width ratio used to determine the orientation of the
+	 *            image so the primary dimension (width or height) can be
+	 *            selected to test if it is greater than or less than a
+	 *            particular threshold.
+	 * 
+	 * @return the fastest {@link Method} suited for scaling the image to the
+	 *         specified dimensions while maintaining a good-looking result.
+	 */
+	protected static Method determineScalingMethod(int targetWidth,
+			int targetHeight, float ratio) {
+		// Get the primary dimension based on the orientation of the image
+		int length = (ratio <= 1 ? targetWidth : targetHeight);
+
+		// Default to speed
+		Method result = Method.SPEED;
+
+		// Figure out which method should be used
+		if (length <= QUALITY_BALANCED_THRESHOLD_PX)
+			result = Method.QUALITY;
+		else if (length <= BALANCED_SPEED_THRESHOLD_PX)
+			result = Method.BALANCED;
+
+		if (DEBUG)
+			log("AUTOMATIC Scaling Method Selected [%s] for Image [size=%dx%d]",
+					result.name(), targetWidth, targetHeight);
+
+		return result;
+	}
+
+	/**
+	 * Used to implement a straight-forward image-scaling operation using Java
+	 * 2D.
+	 * <p/>
+	 * This method uses the Snoracle-encouraged method of
+	 * <code>Graphics2D.drawImage(...)</code> to scale the given image with the
+	 * given interpolation hint.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param targetWidth
+	 *            The target width for the scaled image.
+	 * @param targetHeight
+	 *            The target height for the scaled image.
+	 * @param interpolationHintValue
+	 *            The {@link RenderingHints} interpolation value used to
+	 *            indicate the method that {@link Graphics2D} should use when
+	 *            scaling the image.
+	 * 
+	 * @return the result of scaling the original <code>src</code> to the given
+	 *         dimensions using the given interpolation method.
+	 */
+	protected static BufferedImage scaleImage(BufferedImage src,
+			int targetWidth, int targetHeight, Object interpolationHintValue) {
+		// Setup the rendering resources to match the source image's
+		BufferedImage result = new BufferedImage(targetWidth, targetHeight,
+				src.getType());
+		Graphics2D resultGraphics = result.createGraphics();
+
+		// Scale the image to the new buffer using the specified rendering hint.
+		resultGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+				interpolationHintValue);
+		resultGraphics.drawImage(src, 0, 0, targetWidth, targetHeight, null);
+
+		// Just to be clean, explicitly dispose our temporary graphics object
+		resultGraphics.dispose();
+
+		// Return the scaled image to the caller.
+		return result;
+	}
+
+	/**
+	 * Used to implement Chris Campbell's incremental-scaling algorithm: <a
+	 * href="http://today.java.net/pub/a/today/2007/04/03/perils
+	 * -of-image-getscaledinstance
+	 * .html">http://today.java.net/pub/a/today/2007/04/03/perils
+	 * -of-image-getscaledinstance.html</a>.
+	 * <p/>
+	 * Modifications to the original algorithm are variable names and comments
+	 * added for clarity and the hard-coding of using BICUBIC interpolation as
+	 * well as the explicit "flush()" operation on the interim BufferedImage
+	 * instances to avoid resource leaking.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param targetWidth
+	 *            The target width for the scaled image.
+	 * @param targetHeight
+	 *            The target height for the scaled image.
+	 * @param interpolationHintValue
+	 *            The {@link RenderingHints} interpolation value used to
+	 *            indicate the method that {@link Graphics2D} should use when
+	 *            scaling the image.
+	 * 
+	 * @return an image scaled to the given dimensions using the given rendering
+	 *         hint.
+	 */
+	protected static BufferedImage scaleImageIncrementally(BufferedImage src,
+			int targetWidth, int targetHeight, Object interpolationHintValue) {
+		boolean hasReassignedSrc = false;
+		int incrementCount = 0;
+		int currentWidth = src.getWidth();
+		int currentHeight = src.getHeight();
+
+		do {
+			/*
+			 * If the current width is bigger than our target, cut it in half
+			 * and sample again.
+			 */
+			if (currentWidth > targetWidth) {
+				currentWidth /= 2;
+
+				/*
+				 * If we cut the width too far it means we are on our last
+				 * iteration. Just set it to the target width and finish up.
+				 */
+				if (currentWidth < targetWidth)
+					currentWidth = targetWidth;
+			}
+
+			/*
+			 * If the current height is bigger than our target, cut it in half
+			 * and sample again.
+			 */
+
+			if (currentHeight > targetHeight) {
+				currentHeight /= 2;
+
+				/*
+				 * If we cut the height too far it means we are on our last
+				 * iteration. Just set it to the target height and finish up.
+				 */
+
+				if (currentHeight < targetHeight)
+					currentHeight = targetHeight;
+			}
+
+			// Render the incremental scaled image.
+			BufferedImage incrementalImage = scaleImage(src, currentWidth,
+					currentHeight, interpolationHintValue);
+
+			/*
+			 * Before re-assigning our interim (partially scaled)
+			 * incrementalImage to be the new src image before we iterate around
+			 * again to process it down further, we want to flush() the previous
+			 * src image IF (and only IF) it was one of our own temporary
+			 * BufferedImages created during this incremental down-sampling
+			 * cycle. If it wasn't one of ours, then it was the original
+			 * caller-supplied BufferedImage in which case we don't want to
+			 * flush() it and just leave it alone.
+			 */
+			if (hasReassignedSrc)
+				src.flush();
+
+			/*
+			 * Now treat our incremental partially scaled image as the src image
+			 * and cycle through our loop again to do another incremental
+			 * scaling of it (if necessary).
+			 */
+			src = incrementalImage;
+
+			/*
+			 * Keep track of us re-assigning the original caller-supplied source
+			 * image with one of our interim BufferedImages so we know when to
+			 * explicitly flush the interim "src" on the next cycle through.
+			 */
+			if (!hasReassignedSrc)
+				hasReassignedSrc = true;
+
+			// Track how many times we go through this cycle to scale the image.
+			incrementCount++;
+		} while (currentWidth != targetWidth || currentHeight != targetHeight);
+		
+		if(DEBUG)
+			log("\tScaled Image in %d Incremental Steps", incrementCount);
+
+		/*
+		 * Once the loop has exited, the src image argument is now our scaled
+		 * result image that we want to return.
+		 */
+		return src;
 	}
 }
