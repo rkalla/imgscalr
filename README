@@ -4,6 +4,17 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
+2.1
+	* Scaling of certain image types (and byte layouts) could result in very poor
+	looking scaled images ("pixelated" look, discolored dithering, etc.). This was
+	corrected by imgscalr forcibly scaling all source images into the most well-supported
+	image types by Java2D, resulting in excellent scale result quality regardless
+	of the Method specified.
+	* The issue of scaling of poorly supported (by Java2D) image-types can lead 
+	to unexpectedly poor performance was also corrected as a side-effect of this
+	because all source images are converted to the most commonly supported image
+	type for Java2D.
+
 2.0
 	* API-break: resize(BufferedImage, Method, int, int, boolean, boolean) was removed and
 	replaced by resize(BufferedImage, Method, int, int).
