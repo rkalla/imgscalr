@@ -4,6 +4,22 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
+3.0
+	* Big thanks to Magnus Kvalheim from http://www.movellas.com/ for help with
+	this release!
+	* Support for hardware-accelerated BufferedImageOp's was added to the library.
+	You can now provide an optional BufferedImageOp to many of the methods in the
+	imgscalr library and it will be applied to the resultant image before returning
+	it. 
+	* Most common request was for imgscalr to apply an "anti-aliasing" filter to
+	results before returning them; this was achieved by adding support for
+	BufferedImageOps and providing a hand-tuned ConvolveOp to provide a good
+	default that can be applied easily by folks that want the effect but don't
+	want to learn all about BufferedImageOps and what "convolve" even means.
+	* Speed/Balance/Quality THRESHOLD values were adjusted for more optimal results
+	when relying on Method.AUTOMATIC to give good-looking results.
+	* Javadoc was updated to clarify hardware acceleration behaviors.
+
 2.1
 	* Scaling of certain image types (and byte layouts) could result in very poor
 	looking scaled images ("pixelated" look, discolored dithering, etc.). This was
@@ -70,11 +86,17 @@ This library is released under the Apache 2 License. See LICENSE.
 
 Description
 -----------
-A class implementing performant, good-looking and intelligent image-scaling algorithms
-in pure Java. This class implements the Java2D "best practices" when it comes to
-scaling images as well as Chris Campbell's incremental scaling algorithm proposed
-as the best method for down-sizes images for use as thumbnails (along with some
-additional minor optimizations).
+A class implementing performant (hardware accelerated), good-looking and 
+intelligent image-scaling algorithms in pure Java 2D. This class implements the 
+Java2D "best practices" when it comes to scaling images as well as Chris 
+Campbell's incremental scaling algorithm proposed as the best method for 
+down-sizes images for use as thumbnails (along with some additional minor 
+optimizations).
+
+imgscalr also provides support for applying arbitrary BufferedImageOps against
+resultant images directly in the library and provides defaults out of the box
+for common, hardware-accelerated options like applying a light "anti-aliasing"
+filter to the results.
 
 TIP: All resizing operations maintain the original images proportions.
 
