@@ -22,8 +22,14 @@ import java.awt.Transparency;
 import java.awt.image.AreaAveragingScaleFilter;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
+import java.awt.image.ColorModel;
 import java.awt.image.ConvolveOp;
+import java.awt.image.IndexColorModel;
 import java.awt.image.Kernel;
+
+import javax.imageio.ImageIO;
+
+// TODO: Add rotate and flip functionality
 
 /**
  * Class used to implement performant, good-quality and intelligent image
@@ -122,10 +128,55 @@ import java.awt.image.Kernel;
  * <p/>
  * Implementation of logging in this class is as efficient as possible; avoiding
  * any calls to the logger or passing of arguments if logging is not enabled.
+ * <h3>GIF Transparency</h3>
+ * Unfortunately in Java 6 and earlier, support for GIF's
+ * {@link IndexColorModel} is sub-par, both in accurate color-selection and in
+ * maintaining transparency when moving to an image of type
+ * {@link BufferedImage#TYPE_INT_ARGB}; because of this issue when a GIF image
+ * is processed by imgscalr and the result saved as a GIF file, it is possible
+ * to lose the alpha channel of a transparent image or in the case of applying
+ * an optional {@link BufferedImageOp}, lose the entire picture all together in
+ * the result. Scalr currently does nothing to work around this manually because
+ * it is a defect in the platform that is half-fixed in Java 7 and all
+ * workarounds are relatively expensive, in the form of hand-creating and
+ * setting RGB values pixel-by-pixel with a custom {@link ColorModel} in the
+ * scaled image.
+ * <p>
+ * <strong>Workaround</strong>: A workaround to this issue with all version of
+ * Java is to simply save a GIF as a PNG; no change to your code needs to be
+ * made except when the image is saved out, e.g. using {@link ImageIO}. When a
+ * file type of "PNG" is used, both the transparency and high color quality will
+ * be maintained.
+ * <p>
+ * If the issue with optional {@link BufferedImageOp}s destroying GIF image
+ * content is ever fixed in the platform, saving out resulting images as GIFs
+ * should suddenly start working.
+ * <p>
+ * More can be read about the issue <a
+ * href="http://gman.eichberger.de/2007/07/transparent-gifs-in-java.html"
+ * >here</a> and <a
+ * href="http://ubuntuforums.org/archive/index.php/t-1060128.html">here</a>.
  * 
  * @author Riyad Kalla (software@thebuzzmedia.com)
  */
 public class Scalr {
+	/*
+	 * TODO: Adjust the BufferedImageOps to be var-arg so you can pass multiple
+	 * args.
+	 * 
+	 * TODO: Add predefined AffineTransforms for FLIP and ROTATE. - 90 degree CW
+	 * - 90 degree CCW
+	 * 
+	 * these + Flip allow an image to be in any of 4 possible orientations
+	 * 
+	 * TODO: Provide pre-defined AffineTransformOps that can be added to the op
+	 * list that will perform the manipulation. Q: Maybe not, the target image
+	 * dimensions wouldn't be known until after the rotation... maybe stick to
+	 * the Enum approach and hide all the details. NOTE: Nevermind, should be
+	 * OK, the Op itself will output an image of the right size I believe, need
+	 * to test.
+	 */
+
 	/**
 	 * Flag used to indicate if debugging output has been enabled by setting the
 	 * "imgscalr.debug" system property to <code>true</code>. This value will be
@@ -173,6 +224,11 @@ public class Scalr {
 	 * <h3>Performance</h3>
 	 * Use of this (and other) {@link ConvolveOp}s are hardware accelerated when
 	 * possible.
+	 * <h3>Known Issues</h3>
+	 * In all versions of Java (tested up to Java 7 preview Build 131), running
+	 * this op against a GIF with transparency and attempting to save the
+	 * resulting image as a GIF results in a corrupted/empty file. The file must
+	 * be saved out as a PNG to maintain the transparency.
 	 */
 	public static final ConvolveOp DEFAULT_ANTIALIAS_OP = new ConvolveOp(
 			new Kernel(3, 3, new float[] { .0f, .08f, .0f, .08f, .68f, .08f,
@@ -290,7 +346,8 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetSize)
 			throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, targetSize, targetSize, null);
+		return resize(src, Method.AUTOMATIC, targetSize, targetSize,
+				(BufferedImageOp) null);
 	}
 
 	/**
@@ -312,9 +369,10 @@ public class Scalr {
 	 * @param targetSize
 	 *            The target width and height (square) that you wish the image
 	 *            to fit within.
-	 * @param op
-	 *            The image operation (e.g. sharpen, blur, etc.) that can be
-	 *            applied to the final result before returning the image.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
 	 * 
 	 * @return the proportionally scaled image with either a width or height of
 	 *         the given target size.
@@ -325,8 +383,8 @@ public class Scalr {
 	 * @see #DEFAULT_ANTIALIAS_OP
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetSize,
-			BufferedImageOp op) throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, targetSize, targetSize, op);
+			BufferedImageOp... ops) throws IllegalArgumentException {
+		return resize(src, Method.AUTOMATIC, targetSize, targetSize, ops);
 	}
 
 	/**
@@ -353,7 +411,8 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetWidth,
 			int targetHeight) throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, targetWidth, targetHeight, null);
+		return resize(src, Method.AUTOMATIC, targetWidth, targetHeight,
+				(BufferedImageOp) null);
 	}
 
 	/**
@@ -381,9 +440,10 @@ public class Scalr {
 	 *            The target width that you wish the image to have.
 	 * @param targetHeight
 	 *            The target height that you wish the image to have.
-	 * @param op
-	 *            The image operation (e.g. sharpen, blur, etc.) that can be
-	 *            applied to the final result before returning the image.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
 	 * 
 	 * @return the proportionally scaled image with either a width or height of
 	 *         the given target size.
@@ -394,9 +454,9 @@ public class Scalr {
 	 * @see #DEFAULT_ANTIALIAS_OP
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetWidth,
-			int targetHeight, BufferedImageOp op)
+			int targetHeight, BufferedImageOp... ops)
 			throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, targetWidth, targetHeight, op);
+		return resize(src, Method.AUTOMATIC, targetWidth, targetHeight, ops);
 	}
 
 	/**
@@ -422,7 +482,50 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
 			int targetSize) throws IllegalArgumentException {
-		return resize(src, scalingMethod, targetSize, targetSize, null);
+		return resize(src, scalingMethod, targetSize, targetSize,
+				(BufferedImageOp) null);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height of the given <code>targetSize</code> using the given scaling
+	 * method and applying the given {@link BufferedImageOp} to the final result
+	 * before returning it if one is provided.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code> or if
+	 *             <code>targetSize</code> is &lt; 0.
+	 * 
+	 * @see #DEFAULT_ANTIALIAS_OP
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			int targetSize, BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		return resize(src, scalingMethod, targetSize, targetSize, ops);
 	}
 
 	/**
@@ -454,7 +557,8 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
 			int targetWidth, int targetHeight) throws IllegalArgumentException {
-		return resize(src, scalingMethod, targetWidth, targetHeight, null);
+		return resize(src, scalingMethod, targetWidth, targetHeight,
+				(BufferedImageOp) null);
 	}
 
 	/**
@@ -485,9 +589,10 @@ public class Scalr {
 	 *            The target width that you wish the image to have.
 	 * @param targetHeight
 	 *            The target height that you wish the image to have.
-	 * @param op
-	 *            The image operation (e.g. sharpen, blur, etc.) that can be
-	 *            applied to the final result before returning the image.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
 	 * 
 	 * @return the proportionally scaled image no bigger than the given width
 	 *         and height.
@@ -500,7 +605,7 @@ public class Scalr {
 	 * @see #DEFAULT_ANTIALIAS_OP
 	 */
 	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			int targetWidth, int targetHeight, BufferedImageOp op)
+			int targetWidth, int targetHeight, BufferedImageOp... ops)
 			throws IllegalArgumentException {
 		if (scalingMethod == null)
 			throw new IllegalArgumentException("scalingMethod cannot be null");
@@ -634,9 +739,24 @@ public class Scalr {
 				}
 			}
 
-			// Apply the image op if one was provided
-			if (op != null)
-				result = op.filter(result, null);
+			// Apply the image ops if any were provided
+			if (ops != null && ops.length > 0) {
+				if (DEBUG)
+					log("Applying %d Image Ops to Result", ops.length);
+
+				for (BufferedImageOp op : ops) {
+					// In case a null op was passed in, skip it instead of dying
+					if (op == null)
+						continue;
+
+					long opStartTime = System.currentTimeMillis();
+					result = op.filter(result, null);
+
+					if (DEBUG)
+						log("\tImage Op Applied in %d ms, Op: %s",
+								(System.currentTimeMillis() - opStartTime), op);
+				}
+			}
 
 			if (DEBUG) {
 				long elapsedTime = System.currentTimeMillis() - startTime;
@@ -753,11 +873,11 @@ public class Scalr {
 	protected static BufferedImage scaleImage(BufferedImage src,
 			int targetWidth, int targetHeight, Object interpolationHintValue) {
 		/*
-		 * Determine the TYPE of image (plain RGB or RGB + Alpha) that we want
-		 * to render the scaled instance into. We force all rendering results
-		 * into one of these two types, avoiding the case where a source image
-		 * is of an unsupported (or poorly supported) format by Java2D and the
-		 * written results, when attempting to re-create and write out that
+		 * Determine the RGB-based TYPE of image (plain RGB or RGB + Alpha) that
+		 * we want to render the scaled instance into. We force all rendering
+		 * results into one of these two types, avoiding the case where a source
+		 * image is of an unsupported (or poorly supported) format by Java2D and
+		 * the written results, when attempting to re-create and write out that
 		 * format, is garbage.
 		 * 
 		 * Originally reported by Magnus Kvalheim from Movellas when scaling
