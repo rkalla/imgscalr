@@ -25,7 +25,7 @@ import org.junit.Test;
 
 import com.thebuzzmedia.imgscalr.Scalr.Method;
 
-public class ScalrTest {
+public class ScalrTest extends AbstractTest {
 	private static boolean SHOW_OUTPUT = true;
 
 	private static int LANDSCAPE_IMAGE_WIDTH = 800;
@@ -265,5 +265,66 @@ public class ScalrTest {
 		assertNotNull(result);
 		assertEquals(150, result.getWidth());
 		assertEquals(200, result.getHeight());
+	}
+
+	/**
+	 * Resize a portrait (600x800) down to a super-tiny size that would require
+	 * a sub-pixel result (600 down to 7.5), ensure that the fractional pixel
+	 * value is cropped and not scaled up.
+	 */
+	@Test
+	public void testPortraitResizeUnproportionalTiny() {
+		BufferedImage result = Scalr.resize(portraitImage, 10);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testPortraitResizeUnproportional2: "
+					+ result.getWidth() + "x" + result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(8, result.getWidth());
+		assertEquals(10, result.getHeight());
+	}
+
+	@Test
+	public void testModeAuto() {
+		BufferedImage result = Scalr.resize(landscapeImage,
+				Scalr.Mode.AUTOMATIC, LANDSCAPE_TARGET_WIDTH,
+				LANDSCAPE_TARGET_HEIGHT);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testModeAuto: " + result.getWidth() + "x"
+					+ result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(LANDSCAPE_TARGET_WIDTH, result.getWidth());
+		assertEquals(LANDSCAPE_TARGET_HEIGHT, result.getHeight());
+	}
+
+	@Test
+	public void testModeHeight() {
+		BufferedImage result = Scalr.resize(landscapeImage,
+				Scalr.Mode.FIT_TO_HEIGHT, LANDSCAPE_TARGET_WIDTH);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testModeHeight: " + result.getWidth() + "x"
+					+ result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(427, result.getWidth());
+		assertEquals(LANDSCAPE_TARGET_WIDTH, result.getHeight());
+	}
+	
+	@Test
+	public void testModeWidth() {
+		BufferedImage result = Scalr.resize(portraitImage,
+				Scalr.Mode.FIT_TO_WIDTH, PORTRAIT_TARGET_HEIGHT);
+
+		if (SHOW_OUTPUT)
+			System.out.println("testModeWidth: " + result.getWidth() + "x"
+					+ result.getHeight());
+
+		assertNotNull(result);
+		assertEquals(PORTRAIT_TARGET_HEIGHT, result.getWidth());
+		assertEquals(427, result.getHeight());
 	}
 }
