@@ -1021,7 +1021,8 @@ public class Scalr {
 	 *         and height.
 	 * 
 	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code>, if
+	 *             if <code>src</code> is <code>null</code>, if
+	 *             <code>scalingMethod</code> is <code>null</code>, if
 	 *             <code>resizeMethod</code> is <code>null</code>, if
 	 *             <code>targetWidth</code> is &lt; 0 or if
 	 *             <code>targetHeight</code> is &lt; 0.
@@ -1031,6 +1032,9 @@ public class Scalr {
 	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
 			Mode resizeMode, int targetWidth, int targetHeight,
 			BufferedImageOp... ops) throws IllegalArgumentException {
+		if (src == null)
+			throw new IllegalArgumentException(
+					"src cannot be null, a valid BufferedImage instance must be provided.");
 		if (scalingMethod == null)
 			throw new IllegalArgumentException(
 					"scalingMethod cannot be null. A good default value is Method.AUTOMATIC.");
@@ -1044,181 +1048,171 @@ public class Scalr {
 
 		BufferedImage result = null;
 
-		// Make sure we have something to do first.
-		if (src != null) {
-			long startTime = System.currentTimeMillis();
+		long startTime = System.currentTimeMillis();
 
-			// Clear the 'null' ops arg passed in from other API methods
-			if (ops != null && ops.length == 1 && ops[0] == null)
-				ops = null;
+		// Clear the 'null' ops arg passed in from other API methods
+		if (ops != null && ops.length == 1 && ops[0] == null)
+			ops = null;
 
-			int currentWidth = src.getWidth();
-			int currentHeight = src.getHeight();
+		int currentWidth = src.getWidth();
+		int currentHeight = src.getHeight();
 
-			// <= 1 is a square or landscape-oriented image, > 1 is a portrait.
-			float ratio = ((float) currentHeight / (float) currentWidth);
+		// <= 1 is a square or landscape-oriented image, > 1 is a portrait.
+		float ratio = ((float) currentHeight / (float) currentWidth);
 
-			if (DEBUG)
-				log("START Resizing Source Image [size=%dx%d, mode=%s, orientation=%s, ratio(H/W)=%f] to [targetSize=%dx%d]",
-						currentWidth, currentHeight, resizeMode,
-						(ratio <= 1 ? "Landscape/Square" : "Portrait"), ratio,
-						targetWidth, targetHeight);
+		if (DEBUG)
+			log("START Resizing Source Image [size=%dx%d, mode=%s, orientation=%s, ratio(H/W)=%f] to [targetSize=%dx%d]",
+					currentWidth, currentHeight, resizeMode,
+					(ratio <= 1 ? "Landscape/Square" : "Portrait"), ratio,
+					targetWidth, targetHeight);
+
+		/*
+		 * The proportion of the picture must be honored, the way that is done
+		 * is to figure out if the image is in a LANDSCAPE/SQUARE or PORTRAIT
+		 * orientation and depending on its orientation, use the primary
+		 * dimension (width for LANDSCAPE/SQUARE and height for PORTRAIT) to
+		 * recalculate the alternative (height and width respectively) value
+		 * that adheres to the existing ratio. This helps make life easier for
+		 * the caller as they don't need to pre-compute proportional dimensions
+		 * before calling the API, they can just specify the dimensions they
+		 * would like the image to roughly fit within and it will do the right
+		 * thing without mangling the result.
+		 */
+		if ((ratio <= 1 && resizeMode == Mode.AUTOMATIC)
+				|| (resizeMode == Mode.FIT_TO_WIDTH)) {
+			// First make sure we need to do any work in the first place
+			if (targetWidth == src.getWidth())
+				return src;
+
+			// Save for detailed logging (this is cheap).
+			int originalTargetHeight = targetHeight;
 
 			/*
-			 * The proportion of the picture must be honored, the way that is
-			 * done is to figure out if the image is in a LANDSCAPE/SQUARE or
-			 * PORTRAIT orientation and depending on its orientation, use the
-			 * primary dimension (width for LANDSCAPE/SQUARE and height for
-			 * PORTRAIT) to recalculate the alternative (height and width
-			 * respectively) value that adheres to the existing ratio. This
-			 * helps make life easier for the caller as they don't need to
-			 * pre-compute proportional dimensions before calling the API, they
-			 * can just specify the dimensions they would like the image to
-			 * roughly fit within and it will do the right thing without
-			 * mangling the result.
+			 * Landscape or Square Orientation: Ignore the given height and
+			 * re-calculate a proportionally correct value based on the
+			 * targetWidth.
 			 */
-			if ((ratio <= 1 && resizeMode == Mode.AUTOMATIC)
-					|| (resizeMode == Mode.FIT_TO_WIDTH)) {
-				// First make sure we need to do any work in the first place
-				if (targetWidth == src.getWidth())
-					return src;
+			targetHeight = Math.round((float) targetWidth * ratio);
 
-				// Save for detailed logging (this is cheap).
-				int originalTargetHeight = targetHeight;
+			if (DEBUG && originalTargetHeight != targetHeight)
+				log("Auto-Corrected targetHeight [from=%d to=%d] to honor image proportions",
+						originalTargetHeight, targetHeight);
+		} else {
+			// First make sure we need to do any work in the first place
+			if (targetHeight == src.getHeight())
+				return src;
+
+			// Save for detailed logging (this is cheap).
+			int originalTargetWidth = targetWidth;
+
+			/*
+			 * Portrait Orientation: Ignore the given width and re-calculate a
+			 * proportionally correct value based on the targetHeight.
+			 */
+			targetWidth = Math.round((float) targetHeight / ratio);
+
+			if (DEBUG && originalTargetWidth != targetWidth)
+				log("Auto-Corrected targetWidth [from=%d to=%d] to honor image proportions",
+						originalTargetWidth, targetWidth);
+		}
+
+		// If AUTOMATIC was specified, determine the real scaling method.
+		if (scalingMethod == Scalr.Method.AUTOMATIC)
+			scalingMethod = determineScalingMethod(targetWidth, targetHeight,
+					ratio);
+
+		if (DEBUG)
+			log("Scaling Image to [size=%dx%d] using the %s method...",
+					targetWidth, targetHeight, scalingMethod);
+
+		// Now we scale the image
+		if (scalingMethod == Scalr.Method.SPEED) {
+			result = scaleImage(src, targetWidth, targetHeight,
+					RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+		} else if (scalingMethod == Scalr.Method.BALANCED) {
+			result = scaleImage(src, targetWidth, targetHeight,
+					RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		} else if (scalingMethod == Scalr.Method.QUALITY) {
+			/*
+			 * If we are scaling up (in either width or height - since we know
+			 * the image will stay proportional we just check if either are
+			 * being scaled up), directly using a single BICUBIC will give us
+			 * better results then using Chris Campbell's incremental scaling
+			 * operation (and take a lot less time). If we are scaling down, we
+			 * must use the incremental scaling algorithm for the best result.
+			 */
+			if (targetWidth > currentWidth || targetHeight > currentHeight) {
+				log("\tQUALITY Up-scale, single BICUBIC scaling will be used...");
 
 				/*
-				 * Landscape or Square Orientation: Ignore the given height and
-				 * re-calculate a proportionally correct value based on the
-				 * targetWidth.
+				 * BILINEAR and BICUBIC look similar the smaller the scale jump
+				 * upwards is, if the scale is larger BICUBIC looks sharper and
+				 * less fuzzy. But most importantly we have to use BICUBIC to
+				 * match the contract of the QUALITY rendering method. This note
+				 * is just here for anyone reading the code and wondering how
+				 * they can speed their own calls up.
 				 */
-				targetHeight = Math.round((float) targetWidth * ratio);
-
-				if (DEBUG && originalTargetHeight != targetHeight)
-					log("Auto-Corrected targetHeight [from=%d to=%d] to honor image proportions",
-							originalTargetHeight, targetHeight);
+				result = scaleImage(src, targetWidth, targetHeight,
+						RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 			} else {
-				// First make sure we need to do any work in the first place
-				if (targetHeight == src.getHeight())
-					return src;
-
-				// Save for detailed logging (this is cheap).
-				int originalTargetWidth = targetWidth;
+				log("\tQUALITY Down-scale, incremental scaling will be used...");
 
 				/*
-				 * Portrait Orientation: Ignore the given width and re-calculate
-				 * a proportionally correct value based on the targetHeight.
+				 * Originally we wanted to use BILINEAR interpolation here
+				 * because it takes 1/3rd the time that the BICUBIC
+				 * interpolation does, however, when scaling large images down
+				 * to most sizes bigger than a thumbnail we witnessed noticeable
+				 * "softening" in the resultant image with BILINEAR that would
+				 * be unexpectedly annoying to a user expecting a "QUALITY"
+				 * scale of their original image. Instead BICUBIC was chosen to
+				 * honor the contract of a QUALITY scale of the original image.
 				 */
-				targetWidth = Math.round((float) targetHeight / ratio);
-
-				if (DEBUG && originalTargetWidth != targetWidth)
-					log("Auto-Corrected targetWidth [from=%d to=%d] to honor image proportions",
-							originalTargetWidth, targetWidth);
+				result = scaleImageIncrementally(src, targetWidth,
+						targetHeight,
+						RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 			}
+		}
 
-			// If AUTOMATIC was specified, determine the real scaling method.
-			if (scalingMethod == Scalr.Method.AUTOMATIC)
-				scalingMethod = determineScalingMethod(targetWidth,
-						targetHeight, ratio);
-
+		// Apply the image ops if any were provided
+		if (ops != null && ops.length > 0) {
 			if (DEBUG)
-				log("Scaling Image to [size=%dx%d] using the %s method...",
-						targetWidth, targetHeight, scalingMethod);
+				log("Applying %d Image Ops to Result", ops.length);
 
-			// Now we scale the image
-			if (scalingMethod == Scalr.Method.SPEED) {
-				result = scaleImage(src, targetWidth, targetHeight,
-						RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-			} else if (scalingMethod == Scalr.Method.BALANCED) {
-				result = scaleImage(src, targetWidth, targetHeight,
-						RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-			} else if (scalingMethod == Scalr.Method.QUALITY) {
+			for (BufferedImageOp op : ops) {
+				// In case a null op was passed in, skip it instead of dying
+				if (op == null)
+					continue;
+
+				long opStartTime = System.currentTimeMillis();
+				Rectangle2D dims = op.getBounds2D(result);
+
 				/*
-				 * If we are scaling up (in either width or height - since we
-				 * know the image will stay proportional we just check if either
-				 * are being scaled up), directly using a single BICUBIC will
-				 * give us better results then using Chris Campbell's
-				 * incremental scaling operation (and take a lot less time). If
-				 * we are scaling down, we must use the incremental scaling
-				 * algorithm for the best result.
+				 * We must manually create the target image; we cannot rely on
+				 * the null-dest filter() method to create a valid destination
+				 * for us thanks to this JDK bug that has been filed for almost
+				 * a decade: http://bugs.sun.com/bugdatabase/view_bug.
+				 * do;jsessionid=33b25bf937f467791ff5792cb9dc?bug_id=4965606
 				 */
-				if (targetWidth > currentWidth || targetHeight > currentHeight) {
-					log("\tQUALITY Up-scale, single BICUBIC scaling will be used...");
+				BufferedImage dest = new BufferedImage((int) Math.round(dims
+						.getWidth()), (int) Math.round(dims.getHeight()),
+						result.getType());
 
-					/*
-					 * BILINEAR and BICUBIC look similar the smaller the scale
-					 * jump upwards is, if the scale is larger BICUBIC looks
-					 * sharper and less fuzzy. But most importantly we have to
-					 * use BICUBIC to match the contract of the QUALITY
-					 * rendering method. This note is just here for anyone
-					 * reading the code and wondering how they can speed their
-					 * own calls up.
-					 */
-					result = scaleImage(src, targetWidth, targetHeight,
-							RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-				} else {
-					log("\tQUALITY Down-scale, incremental scaling will be used...");
+				result = op.filter(result, dest);
 
-					/*
-					 * Originally we wanted to use BILINEAR interpolation here
-					 * because it takes 1/3rd the time that the BICUBIC
-					 * interpolation does, however, when scaling large images
-					 * down to most sizes bigger than a thumbnail we witnessed
-					 * noticeable "softening" in the resultant image with
-					 * BILINEAR that would be unexpectedly annoying to a user
-					 * expecting a "QUALITY" scale of their original image.
-					 * Instead BICUBIC was chosen to honor the contract of a
-					 * QUALITY scale of the original image.
-					 */
-					result = scaleImageIncrementally(src, targetWidth,
-							targetHeight,
-							RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-				}
-			}
-
-			// Apply the image ops if any were provided
-			if (ops != null && ops.length > 0) {
 				if (DEBUG)
-					log("Applying %d Image Ops to Result", ops.length);
-
-				for (BufferedImageOp op : ops) {
-					// In case a null op was passed in, skip it instead of dying
-					if (op == null)
-						continue;
-
-					long opStartTime = System.currentTimeMillis();
-					Rectangle2D dims = op.getBounds2D(result);
-
-					/*
-					 * We must manually create the target image; we cannot rely
-					 * on the null-dest filter() method to create a valid
-					 * destination for us thanks to this JDK bug that has been
-					 * filed for almost a decade:
-					 * http://bugs.sun.com/bugdatabase/view_bug.
-					 * do;jsessionid=33b25bf937f467791ff5792cb9dc?bug_id=4965606
-					 */
-					BufferedImage dest = new BufferedImage(
-							(int) Math.round(dims.getWidth()),
-							(int) Math.round(dims.getHeight()),
-							result.getType());
-
-					result = op.filter(result, dest);
-
-					if (DEBUG)
-						log("\tOp Applied in %d ms, Resultant Image [width=%d, height=%d], Op: %s",
-								(System.currentTimeMillis() - opStartTime),
-								result.getWidth(), result.getHeight(), op);
-				}
+					log("\tOp Applied in %d ms, Resultant Image [width=%d, height=%d], Op: %s",
+							(System.currentTimeMillis() - opStartTime),
+							result.getWidth(), result.getHeight(), op);
 			}
+		}
 
-			if (DEBUG) {
-				long elapsedTime = System.currentTimeMillis() - startTime;
-				log("END Source Image Scaled from [%dx%d] to [%dx%d] and %d BufferedImageOp(s) Applied in %d ms",
-						currentWidth, currentHeight, result.getWidth(),
-						result.getHeight(), (ops == null ? 0 : ops.length),
-						elapsedTime);
-			}
-		} else
-			log("No Source Image Specified, exiting...");
+		if (DEBUG) {
+			long elapsedTime = System.currentTimeMillis() - startTime;
+			log("END Source Image Scaled from [%dx%d] to [%dx%d] and %d BufferedImageOp(s) Applied in %d ms",
+					currentWidth, currentHeight, result.getWidth(),
+					result.getHeight(), (ops == null ? 0 : ops.length),
+					elapsedTime);
+		}
 
 		return result;
 	}
