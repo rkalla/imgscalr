@@ -4,6 +4,23 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
+3.1
+	* You can now specify Mode.FIT_TO_WIDTH or Mode.FIT_TO_HEIGHT behaviors
+	when resizing an image to get imgscalr to treat one dimension as the primary
+	and recalculate the other dimension to best fit it, regardless of the image's
+	orientation. Previously this was decided automatically for you by the
+	orientation of the image.
+	* resize methods now accept 0 or more BufferedImageOps as var-arg arguments.
+	* Workaround for a 10-year-old JDK bug that causes RasterExceptions to get
+	thrown from inside of Java2D when using BufferedImageOps was built directly
+	into imgscalr so you don't have to worry about RasterExceptions. More
+	info here: https://github.com/thebuzzmedia/imgscalr/issues/closed#issue/23
+	* API was made more strict and an IAE is thrown if 'src' is null to any of
+	the resize operations; a user reported that he spent a while debugging why
+	"imgscalr wasn't working" only to find out it was silently returning due to
+	a null source image. Would have been helpful if imgscalr had notified him of
+	the issue immediately.
+
 3.0
 	* Big thanks to Magnus Kvalheim from http://www.movellas.com/ for help with
 	this release!
