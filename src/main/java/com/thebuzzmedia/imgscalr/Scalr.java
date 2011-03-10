@@ -314,7 +314,8 @@ public class Scalr {
 		 * orientation and generating proportional dimensions that best fit into
 		 * the target width and height given
 		 * 
-		 * See "Image Proportions" in the class description for more detail.
+		 * See "Image Proportions" in the {@link Scalr} class description for
+		 * more detail.
 		 */
 		AUTOMATIC,
 		/**
