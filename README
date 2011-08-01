@@ -10,11 +10,14 @@ Changelog
 	and recalculate the other dimension to best fit it, regardless of the image's
 	orientation. Previously this was decided automatically for you by the
 	orientation of the image.
+	
 	* resize methods now accept 0 or more BufferedImageOps as var-arg arguments.
+	
 	* Workaround for a 10-year-old JDK bug that causes RasterExceptions to get
 	thrown from inside of Java2D when using BufferedImageOps was built directly
 	into imgscalr so you don't have to worry about RasterExceptions. More
 	info here: https://github.com/thebuzzmedia/imgscalr/issues/closed#issue/23
+	
 	* API was made more strict and an IAE is thrown if 'src' is null to any of
 	the resize operations; a user reported that he spent a while debugging why
 	"imgscalr wasn't working" only to find out it was silently returning due to
@@ -24,17 +27,21 @@ Changelog
 3.0
 	* Big thanks to Magnus Kvalheim from http://www.movellas.com/ for help with
 	this release!
+	
 	* Support for hardware-accelerated BufferedImageOp's was added to the library.
 	You can now provide an optional BufferedImageOp to many of the methods in the
 	imgscalr library and it will be applied to the resultant image before returning
 	it. 
+	
 	* Most common request was for imgscalr to apply an "anti-aliasing" filter to
 	results before returning them; this was achieved by adding support for
 	BufferedImageOps and providing a hand-tuned ConvolveOp to provide a good
 	default that can be applied easily by folks that want the effect but don't
 	want to learn all about BufferedImageOps and what "convolve" even means.
+	
 	* Speed/Balance/Quality THRESHOLD values were adjusted for more optimal results
 	when relying on Method.AUTOMATIC to give good-looking results.
+	
 	* Javadoc was updated to clarify hardware acceleration behaviors.
 
 2.1
@@ -43,6 +50,7 @@ Changelog
 	corrected by imgscalr forcibly scaling all source images into the most well-supported
 	image types by Java2D, resulting in excellent scale result quality regardless
 	of the Method specified.
+	
 	* The issue of scaling of poorly supported (by Java2D) image-types can lead 
 	to unexpectedly poor performance was also corrected as a side-effect of this
 	because all source images are converted to the most commonly supported image
@@ -51,26 +59,36 @@ Changelog
 2.0
 	* API-break: resize(BufferedImage, Method, int, int, boolean, boolean) was removed and
 	replaced by resize(BufferedImage, Method, int, int).
+	
 	* DEBUG system variable added; set 'imgscalr.debug' to true to trigger debugging output
 	in the console. The boolean debug and elapsedTime arguments to the resize method
 	have been removed.
+	
 	* New BALANCED method added. Provides a better result than SPEED faster than QUALITY.
+	
 	* Added 2 optimized thresholds (in pixels) that the API uses to select the best Method
 	for scaling when the user specifies AUTOMATIC (or doesn't specify a method). This helps
 	provide much better results out of the box by default and tightens up the performance of the
 	API a bit more.
+	
 	* Image comparison generator utility (ComparisonGenerator test class) added.
+	
 	* Functional portions of API broken into static protected methods that can be
 	easily overridden by implementors to customize the API without needing to rewrite
 	the resize methods.
+	
 	* Consolidated 5 locations of duplicated rendering code into a single method (scaleImage).
+	
 	* Tightened up image scaling operation to do everything possible to avoid memory leaks (every native
 	resource is disposed or released explicitly)
+	
 	* Detailed logging information integrated. If the 'imgscalr.debug' system property is
 	true, the API outputs exactly what it's doing, what argument values it is processing and
 	how long it is taking to do each scale operation.
+	
 	* When AUTOMATIC method is specified, the API is more intelligent about selecting
 	SPEED, BALANCED or QUALITY based on the images primary dimension only (more accurate).
+	
 	* Copious amounts of Javadoc added to new methods, new code and existing code. 
 	
 	Issues Resolved in 2.0:
@@ -81,11 +99,15 @@ Changelog
 	landscape then width is the preferred dimension and the given height is ignored
 	(and recalculated) and visa-versa if the image is portrait oriented. This gives
 	much better "default behavior" results.
+	
 	* Added new convenience method resize(BufferedImage,int,int)
+	
 	* Modified build.xml to output Maven-friendly artifact names.
+	
 	* Library now available from the http://maven.thebuzzmedia.com Maven repo, see
 	"Maven" section on this page for more information:
 	http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
+	
 	* Javadoc is now available on the web at:
 	http://www.thebuzzmedia.com/downloads/software/imgscalr/javadoc/index.html
 	
