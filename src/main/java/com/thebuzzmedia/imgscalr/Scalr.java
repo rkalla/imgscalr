@@ -19,6 +19,7 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
 import java.awt.Transparency;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.AreaAveragingScaleFilter;
 import java.awt.image.BufferedImage;
@@ -30,17 +31,6 @@ import java.awt.image.Kernel;
 
 import javax.imageio.ImageIO;
 
-/*
- * NOTE: Moving to an enum-based approach to handling styling in the API as
- * using the BufferedImageOp approach wasn't scaling; a lot of ops, like AffineTransforms,
- * require instance-to-instance customization and configuration before being
- * applied; trying to do that at the API level while exposing the exact instance you
- * need to use doesn't work or scale and leads to a confusing API.
- * 
- * Instead with 4.0, will take an approach of letting people set ENUMs that trigger
- * default behaviors for the most common functionality.
- */
-
 /**
  * Class used to implement performant, good-quality and intelligent image
  * scaling algorithms in native Java 2D. This class utilizes the Java2D
@@ -49,7 +39,7 @@ import javax.imageio.ImageIO;
  * <p/>
  * Hardware acceleration also includes execution of optional caller-supplied
  * {@link BufferedImageOp}s that are applied to the resultant images before
- * returning them.
+ * returning them as well as any optional rotations specified.
  * <h3>Image Proportions</h3>
  * All scaling operations implemented by this class maintain the proportion of
  * the original image. If image-cropping is desired the caller will need to
@@ -67,12 +57,11 @@ import javax.imageio.ImageIO;
  * what is passed in.</li>
  * <li>If a {@link Mode} value of {@link Mode#FIT_TO_WIDTH} or
  * {@link Mode#FIT_TO_HEIGHT} is passed in to the <code>resize</code> method,
- * the orientation is ignored and the scaled image is fit to the dimension the
- * user specified with the {@link Mode}.</li>
+ * the image's orientation is ignored and the scaled image is fit to the
+ * dimension the user specified with the {@link Mode}.</li>
  * </ol>
- * Recalculation of the secondary dimensions is extremely cheap to the point of
- * it being negligible and this design provides users with better
- * expected-behavior from the library; which is why this approach was chosen.
+ * Recalculation of the secondary dimensions is extremely cheap and this
+ * approach provides users with better expected-behavior from the library.
  * <h3>Image Quality</h3>
  * This class implements a few different methods for scaling an image, providing
  * either the best-looking result, the fastest result or a balanced result
@@ -87,6 +76,11 @@ import javax.imageio.ImageIO;
  * {@link RenderingHints#VALUE_INTERPOLATION_BICUBIC} interpolation) would
  * produce a much worse-looking result.
  * <p/>
+ * Only when scaling using the {@link Method#AUTOMATIC} method will this class
+ * look at the size of the image before selecting an approach to scaling the
+ * image. If {@link Method#QUALITY} is specified, the best-looking algorithm
+ * possible is always used.
+ * <p/>
  * Minor modifications are made to Campbell's original implementation in the
  * form of:
  * <ol>
@@ -99,10 +93,11 @@ import javax.imageio.ImageIO;
  * of a much less blurry picture would require that BICUBIC be the default
  * interpolation in order to meet the QUALITY expectation.</li>
  * <li>After each iteration of the do-while loop that incrementally scales the
- * source image down, an effort is made to explicitly call
+ * source image down, an explicit effort is made to call
  * {@link BufferedImage#flush()} on the interim temporary {@link BufferedImage}
  * instances created by the algorithm in an attempt to ensure a more complete GC
- * cycle by the VM when cleaning up the temporary instances.</li>
+ * cycle by the VM when cleaning up the temporary instances (this is in addition
+ * to disposing of the temporary {@link Graphics2D} references as well).</li>
  * <li>Extensive comments have been added to increase readability of the code.</li>
  * <li>Variable names have been expanded to increase readability of the code.</li>
  * </ol>
@@ -141,7 +136,9 @@ import javax.imageio.ImageIO;
  * dependencies to the library.
  * <p/>
  * Implementation of logging in this class is as efficient as possible; avoiding
- * any calls to the logger or passing of arguments if logging is not enabled.
+ * any calls to the logger or passing of arguments if logging is not enabled to
+ * avoid the (hidden) cost of constructing the Object[] argument for the varargs
+ * method call.
  * <h3>GIF Transparency</h3>
  * Unfortunately in Java 6 and earlier, support for GIF's
  * {@link IndexColorModel} is sub-par, both in accurate color-selection and in
@@ -150,17 +147,22 @@ import javax.imageio.ImageIO;
  * is processed by imgscalr and the result saved as a GIF file, it is possible
  * to lose the alpha channel of a transparent image or in the case of applying
  * an optional {@link BufferedImageOp}, lose the entire picture all together in
- * the result. Scalr currently does nothing to work around this manually because
- * it is a defect in the platform that is half-fixed in Java 7 and all
- * workarounds are relatively expensive, in the form of hand-creating and
- * setting RGB values pixel-by-pixel with a custom {@link ColorModel} in the
- * scaled image.
+ * the result (long standing JDK bugs are filed for these).
+ * <p/>
+ * imgscalr currently does nothing to work around this manually because it is a
+ * defect in the native platform code itself. Fortunately it looks like the
+ * issues are half-fixed in Java 7 and any manual workarounds we could attempt
+ * internally are relatively expensive, in the form of hand-creating and setting
+ * RGB values pixel-by-pixel with a custom {@link ColorModel} in the scaled
+ * image. This would lead to a very measurable negative impact on performance
+ * without the caller understanding why.
  * <p>
  * <strong>Workaround</strong>: A workaround to this issue with all version of
  * Java is to simply save a GIF as a PNG; no change to your code needs to be
  * made except when the image is saved out, e.g. using {@link ImageIO}. When a
  * file type of "PNG" is used, both the transparency and high color quality will
- * be maintained.
+ * be maintained as the PNG code path in Java2D is superior to the GIF
+ * implementation.
  * <p>
  * If the issue with optional {@link BufferedImageOp}s destroying GIF image
  * content is ever fixed in the platform, saving out resulting images as GIFs
@@ -208,11 +210,27 @@ public class Scalr {
 	 * A/B testing, the kernel used by this Op was selected as the closest match
 	 * for the target which was the softer results from the deprecated
 	 * {@link AreaAveragingScaleFilter} (which is used internally by the
-	 * deprecated {@link Image#getScaledInstance(int, int, int)} method that
-	 * imgscalr is meant to replace).
+	 * deprecated {@link Image#getScaledInstance(int, int, int)} method in the
+	 * JDK that imgscalr is meant to replace).
 	 * <p/>
-	 * This ConvolveOp uses a 3x3 kernel with the values: .0f, .08f, .0f, .08f,
-	 * .68f, .08f, .0f, .08f, .0f
+	 * This ConvolveOp uses a 3x3 kernel with the values:
+	 * <table cellpadding="4" border="1">
+	 * <tr>
+	 * <td>.0f</td>
+	 * <td>.08f</td>
+	 * <td>.0f</td>
+	 * </tr>
+	 * <tr>
+	 * <td>.08f</td>
+	 * <td>.68f</td>
+	 * <td>.08f</td>
+	 * </tr>
+	 * <tr>
+	 * <td>.0f</td>
+	 * <td>.08f</td>
+	 * <td>.0f</td>
+	 * </tr>
+	 * </table>
 	 * <p/>
 	 * For those that have worked with ConvolveOps before, this Op uses the
 	 * {@link ConvolveOp#EDGE_NO_OP} instruction to not process the pixels along
@@ -249,8 +267,7 @@ public class Scalr {
 	 * class.
 	 */
 	static {
-		if (DEBUG)
-			log("Debug output ENABLED");
+		log("Debug output ENABLED");
 	}
 
 	/**
@@ -269,7 +286,7 @@ public class Scalr {
 		 * <code>BALANCED</code> or <code>SPEED</code> scaling algorithms.
 		 * <p/>
 		 * By default the thresholds chosen will give nearly the best looking
-		 * result in the fastest amount of time. We intent this method to work
+		 * result in the fastest amount of time. We intend this method to work
 		 * for 80% of people looking to scale an image quickly and get a good
 		 * looking result.
 		 */
@@ -333,6 +350,33 @@ public class Scalr {
 	}
 
 	/**
+	 * Used to define the different types of rotations that can be applied to an
+	 * image during a resize operation.
+	 */
+	public static enum Rotation {
+		/**
+		 * No rotation should be applied to the image.
+		 */
+		NONE,
+		/**
+		 * Rotate the image 90-degrees clockwise (to the right). This is
+		 * equivalent to a quarter-turn of the image to the right.
+		 */
+		CLOCKWISE,
+		/**
+		 * Rotate the image negative 90-degrees counter-clockwise (to the left).
+		 * This is equivalent to a quarter-turn of the image to the left. This
+		 * is also equivalent to a 270-degree rotation to the right.
+		 */
+		COUNTER_CLOCKWISE,
+		/**
+		 * Flip the image. This is equivalent to rotating an image 180 degrees
+		 * (right or left, it doesn't matter).
+		 */
+		FLIP;
+	}
+
+	/**
 	 * Threshold (in pixels) at which point the scaling operation using the
 	 * {@link Method#AUTOMATIC} method will decide if a {@link Method#BALANCED}
 	 * method will be used (if smaller than or equal to threshold) or a
@@ -372,66 +416,11 @@ public class Scalr {
 
 	/**
 	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> using the scaling method of
-	 * {@link Method#AUTOMATIC}.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param targetSize
-	 *            The target width and height (square) that you wish the image
-	 *            to fit within.
-	 * 
-	 * @return the proportionally scaled image with either a width or height of
-	 *         the given target size.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>targetSize</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, int targetSize)
-			throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, targetSize,
-				targetSize, (BufferedImageOp) null);
-	}
-
-	/**
-	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> (or fitting the image to the
-	 * given WIDTH or HEIGHT depending on the {@link Mode} specified) using the
-	 * scaling method of {@link Method#AUTOMATIC}.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param resizeMode
-	 *            Used to indicate how imgscalr should calculate the final
-	 *            target size for the image, either fitting the image to the
-	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
-	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
-	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
-	 *            proportional dimensions for the scaled image based on its
-	 *            orientation (landscape, square or portrait). Unless you have
-	 *            very specific size requirements, most of the time you just
-	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
-	 * @param targetSize
-	 *            The target width and height (square) that you wish the image
-	 *            to fit within.
-	 * 
-	 * @return the proportionally scaled image with either a width or height of
-	 *         the given target size.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>targetSize</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, Mode resizeMode,
-			int targetSize) throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, resizeMode, targetSize,
-				targetSize, (BufferedImageOp) null);
-	}
-
-	/**
-	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> using the scaling method of
-	 * {@link Method#AUTOMATIC} and applying the given {@link BufferedImageOp}
-	 * to the final result before returning it if one is provided.
+	 * height no bigger than <code>targetSize</code> and apply the given
+	 * {@link BufferedImageOp}s (if any) to the result before returning it.
+	 * <p/>
+	 * A scaling method of {@link Method#AUTOMATIC}, mode of
+	 * {@link Mode#AUTOMATIC} and rotation of {@link Rotation#NONE} are used.
 	 * <p/>
 	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
 	 * hardware accelerated operations, but many of the most popular (like
@@ -454,6 +443,8 @@ public class Scalr {
 	 * @return the proportionally scaled image with either a width or height of
 	 *         the given target size.
 	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
 	 * @throws IllegalArgumentException
 	 *             if <code>targetSize</code> is &lt; 0.
 	 * 
@@ -461,17 +452,174 @@ public class Scalr {
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetSize,
 			BufferedImageOp... ops) throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, targetSize,
+		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, Rotation.NONE,
+				targetSize, targetSize, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height no bigger than <code>targetSize</code>, apply the given
+	 * {@link BufferedImageOp}s (if any) and then apply the given rotation to
+	 * the result before returning it.
+	 * <p/>
+	 * A scaling method of {@link Method#AUTOMATIC} and mode of
+	 * {@link Mode#AUTOMATIC} are used.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetSize</code> is &lt; 0.
+	 * 
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Rotation rotation,
+			int targetSize, BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, rotation,
+				targetSize, targetSize, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height no bigger than <code>targetSize</code> using the given scaling
+	 * method and apply the given {@link BufferedImageOp}s (if any) to the
+	 * result before returning it.
+	 * <p/>
+	 * A mode of {@link Mode#AUTOMATIC} and rotation of {@link Rotation#NONE}
+	 * are used.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetSize</code> is &lt; 0.
+	 * 
+	 * @see Method
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			int targetSize, BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		return resize(src, scalingMethod, Mode.AUTOMATIC, Rotation.NONE,
+				targetSize, targetSize, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height no bigger than <code>targetSize</code> using the given scaling
+	 * method, apply the given {@link BufferedImageOp}s (if any) and then apply
+	 * the given rotation to the result before returning it.
+	 * <p/>
+	 * A mode of {@link Mode#AUTOMATIC} is used.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetSize</code> is &lt; 0.
+	 * 
+	 * @see Method
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			Rotation rotation, int targetSize, BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		return resize(src, scalingMethod, Mode.AUTOMATIC, rotation, targetSize,
 				targetSize, ops);
 	}
 
 	/**
 	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> (or fitting the image to the
-	 * given WIDTH or HEIGHT depending on the {@link Mode} specified) using the
-	 * scaling method of {@link Method#AUTOMATIC} and applying the given
-	 * {@link BufferedImageOp} to the final result before returning it if one is
-	 * provided.
+	 * height no bigger than <code>targetSize</code> (or fitting the image to
+	 * the given WIDTH or HEIGHT explicitly, depending on the {@link Mode}
+	 * specified) and then apply the given {@link BufferedImageOp}s (if any) to
+	 * the result before returning it.
+	 * <p/>
+	 * A scaling method of {@link Method#AUTOMATIC} and rotation of
+	 * {@link Rotation#NONE} are used.
 	 * <p/>
 	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
 	 * hardware accelerated operations, but many of the most popular (like
@@ -505,55 +653,38 @@ public class Scalr {
 	 *         the given target size.
 	 * 
 	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
 	 *             if <code>targetSize</code> is &lt; 0.
 	 * 
+	 * @see Mode
 	 * @see #OP_ANTIALIAS
 	 */
 	public static BufferedImage resize(BufferedImage src, Mode resizeMode,
 			int targetSize, BufferedImageOp... ops)
 			throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, resizeMode, targetSize,
-				targetSize, ops);
+		return resize(src, Method.AUTOMATIC, resizeMode, Rotation.NONE,
+				targetSize, targetSize, ops);
 	}
 
 	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height using the scaling method of {@link Method#AUTOMATIC}.
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height no bigger than <code>targetSize</code> (or fitting the image to
+	 * the given WIDTH or HEIGHT explicitly, depending on the {@link Mode}
+	 * specified), apply the given {@link BufferedImageOp}s (if any) and then
+	 * apply the given rotation to the result before returning it.
 	 * <p/>
-	 * <strong>TIP</strong>: See the class description to understand how this
-	 * class handles recalculation of the <code>targetWidth</code> or
-	 * <code>targetHeight</code> depending on the image's orientation in order
-	 * to maintain the original proportion.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param targetWidth
-	 *            The target width that you wish the image to have.
-	 * @param targetHeight
-	 *            The target height that you wish the image to have.
-	 * 
-	 * @return the proportionally scaled image with either a width or height of
-	 *         the given target size.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>targetSize</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, int targetWidth,
-			int targetHeight) throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, targetWidth,
-				targetHeight, (BufferedImageOp) null);
-	}
-
-	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height (or fitting the image to the given WIDTH or HEIGHT depending on
-	 * the {@link Mode} specified) using the scaling method of
-	 * {@link Method#AUTOMATIC}.
+	 * A scaling method of {@link Method#AUTOMATIC} is used.
 	 * <p/>
-	 * <strong>TIP</strong>: See the class description to understand how this
-	 * class handles recalculation of the <code>targetWidth</code> or
-	 * <code>targetHeight</code> depending on the image's orientation in order
-	 * to maintain the original proportion.
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
 	 * 
 	 * @param src
 	 *            The image that will be scaled.
@@ -567,28 +698,176 @@ public class Scalr {
 	 *            orientation (landscape, square or portrait). Unless you have
 	 *            very specific size requirements, most of the time you just
 	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
-	 * @param targetWidth
-	 *            The target width that you wish the image to have.
-	 * @param targetHeight
-	 *            The target height that you wish the image to have.
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
 	 * 
 	 * @return the proportionally scaled image with either a width or height of
 	 *         the given target size.
 	 * 
 	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
 	 *             if <code>targetSize</code> is &lt; 0.
+	 * 
+	 * @see Mode
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
 	 */
 	public static BufferedImage resize(BufferedImage src, Mode resizeMode,
-			int targetWidth, int targetHeight) throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, resizeMode, targetWidth,
-				targetHeight, (BufferedImageOp) null);
+			Rotation rotation, int targetSize, BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		return resize(src, Method.AUTOMATIC, resizeMode, rotation, targetSize,
+				targetSize, ops);
 	}
 
 	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height using the scaling method of {@link Method#AUTOMATIC} and applying
-	 * the given {@link BufferedImageOp} to the final result before returning it
-	 * if one is provided.
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height no bigger than <code>targetSize</code> (or fitting the image to
+	 * the given WIDTH or HEIGHT explicitly, depending on the {@link Mode}
+	 * specified) using the given scaling method and apply the given
+	 * {@link BufferedImageOp}s (if any) to the result before returning it.
+	 * <p/>
+	 * A rotation of {@link Rotation#NONE} is used.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param resizeMode
+	 *            Used to indicate how imgscalr should calculate the final
+	 *            target size for the image, either fitting the image to the
+	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
+	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
+	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
+	 *            proportional dimensions for the scaled image based on its
+	 *            orientation (landscape, square or portrait). Unless you have
+	 *            very specific size requirements, most of the time you just
+	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throw IllegalArgumentException if <code>targetSize</code> is &lt; 0.
+	 * 
+	 * @see Method
+	 * @see Mode
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			Mode resizeMode, int targetSize, BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		return resize(src, scalingMethod, resizeMode, Rotation.NONE,
+				targetSize, targetSize, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to a width and
+	 * height no bigger than <code>targetSize</code> (or fitting the image to
+	 * the given WIDTH or HEIGHT explicitly, depending on the {@link Mode}
+	 * specified) using the given scaling method, apply the given
+	 * {@link BufferedImageOp}s (if any) and apply the given rotation to the
+	 * result before returning it.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param resizeMode
+	 *            Used to indicate how imgscalr should calculate the final
+	 *            target size for the image, either fitting the image to the
+	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
+	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
+	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
+	 *            proportional dimensions for the scaled image based on its
+	 *            orientation (landscape, square or portrait). Unless you have
+	 *            very specific size requirements, most of the time you just
+	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetSize
+	 *            The target width and height (square) that you wish the image
+	 *            to fit within.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throw IllegalArgumentException if <code>targetSize</code> is &lt; 0.
+	 * 
+	 * @see Method
+	 * @see Mode
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			Mode resizeMode, Rotation rotation, int targetSize,
+			BufferedImageOp... ops) throws IllegalArgumentException {
+		return resize(src, scalingMethod, resizeMode, rotation, targetSize,
+				targetSize, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height and apply the given {@link BufferedImageOp}s (if any) to
+	 * the result before returning it.
+	 * <p/>
+	 * A scaling method of {@link Method#AUTOMATIC}, mode of
+	 * {@link Mode#AUTOMATIC} and rotation of {@link Rotation#NONE} are used.
 	 * <p/>
 	 * <strong>TIP</strong>: See the class description to understand how this
 	 * class handles recalculation of the <code>targetWidth</code> or
@@ -618,23 +897,202 @@ public class Scalr {
 	 *         the given target size.
 	 * 
 	 * @throws IllegalArgumentException
-	 *             if <code>targetSize</code> is &lt; 0.
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
+	 *             <code>targetHeight</code> is &lt; 0.
 	 * 
 	 * @see #OP_ANTIALIAS
 	 */
 	public static BufferedImage resize(BufferedImage src, int targetWidth,
 			int targetHeight, BufferedImageOp... ops)
 			throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, targetWidth,
-				targetHeight, ops);
+		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, Rotation.NONE,
+				targetWidth, targetHeight, ops);
 	}
 
 	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height (or fitting the image to the given WIDTH or HEIGHT depending on
-	 * the {@link Mode} specified) using the scaling method of
-	 * {@link Method#AUTOMATIC} and applying the given {@link BufferedImageOp}
-	 * to the final result before returning it if one is provided.
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height, apply the given {@link BufferedImageOp}s (if any) and
+	 * apply the given rotation to the result before returning it.
+	 * <p/>
+	 * A scaling method of {@link Method#AUTOMATIC} and mode of
+	 * {@link Mode#AUTOMATIC} are used.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetWidth
+	 *            The target width that you wish the image to have.
+	 * @param targetHeight
+	 *            The target height that you wish the image to have.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
+	 *             <code>targetHeight</code> is &lt; 0.
+	 * 
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Rotation rotation,
+			int targetWidth, int targetHeight, BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		return resize(src, Method.AUTOMATIC, Mode.AUTOMATIC, rotation,
+				targetWidth, targetHeight, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height using the given scaling method and apply the given
+	 * {@link BufferedImageOp}s (if any) to the result before returning it.
+	 * <p/>
+	 * A mode of {@link Mode#AUTOMATIC} and rotation of {@link Rotation#NONE}
+	 * are used.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param targetWidth
+	 *            The target width that you wish the image to have.
+	 * @param targetHeight
+	 *            The target height that you wish the image to have.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image no bigger than the given width
+	 *         and height.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
+	 *             <code>targetHeight</code> is &lt; 0.
+	 * 
+	 * @see Method
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			int targetWidth, int targetHeight, BufferedImageOp... ops) {
+		return resize(src, scalingMethod, Mode.AUTOMATIC, Rotation.NONE,
+				targetWidth, targetHeight, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height using the given scaling method, apply the given
+	 * {@link BufferedImageOp}s (if any) and apply the given rotation to the
+	 * result before returning it.
+	 * <p/>
+	 * A mode of {@link Mode#AUTOMATIC} is used.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetWidth
+	 *            The target width that you wish the image to have.
+	 * @param targetHeight
+	 *            The target height that you wish the image to have.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image no bigger than the given width
+	 *         and height.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
+	 *             <code>targetHeight</code> is &lt; 0.
+	 * 
+	 * @see Method
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			Rotation rotation, int targetWidth, int targetHeight,
+			BufferedImageOp... ops) {
+		return resize(src, scalingMethod, Mode.AUTOMATIC, rotation,
+				targetWidth, targetHeight, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height (or fitting the image to the given WIDTH or HEIGHT
+	 * explicitly, depending on the {@link Mode} specified) and then apply the
+	 * given {@link BufferedImageOp}s (if any) to the result before returning
+	 * it.
+	 * <p/>
+	 * A scaling method of {@link Method#AUTOMATIC} and rotation of
+	 * {@link Rotation#NONE} are used.
 	 * <p/>
 	 * <strong>TIP</strong>: See the class description to understand how this
 	 * class handles recalculation of the <code>targetWidth</code> or
@@ -674,312 +1132,101 @@ public class Scalr {
 	 *         the given target size.
 	 * 
 	 * @throws IllegalArgumentException
-	 *             if <code>targetSize</code> is &lt; 0.
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
+	 *             <code>targetHeight</code> is &lt; 0.
 	 * 
+	 * @see Mode
 	 * @see #OP_ANTIALIAS
 	 */
 	public static BufferedImage resize(BufferedImage src, Mode resizeMode,
 			int targetWidth, int targetHeight, BufferedImageOp... ops)
 			throws IllegalArgumentException {
-		return resize(src, Method.AUTOMATIC, resizeMode, targetWidth,
+		return resize(src, Method.AUTOMATIC, resizeMode, Rotation.NONE,
+				targetWidth, targetHeight, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height (or fitting the image to the given WIDTH or HEIGHT
+	 * explicitly, depending on the {@link Mode} specified), apply the given
+	 * {@link BufferedImageOp}s (if any) and then apply the given rotation to
+	 * the result before returning it.
+	 * <p/>
+	 * A scaling method of {@link Method#AUTOMATIC} is used.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param resizeMode
+	 *            Used to indicate how imgscalr should calculate the final
+	 *            target size for the image, either fitting the image to the
+	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
+	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
+	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
+	 *            proportional dimensions for the scaled image based on its
+	 *            orientation (landscape, square or portrait). Unless you have
+	 *            very specific size requirements, most of the time you just
+	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetWidth
+	 *            The target width that you wish the image to have.
+	 * @param targetHeight
+	 *            The target height that you wish the image to have.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image with either a width or height of
+	 *         the given target size.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
+	 *             <code>targetHeight</code> is &lt; 0.
+	 * 
+	 * @see Mode
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Mode resizeMode,
+			Rotation rotation, int targetWidth, int targetHeight,
+			BufferedImageOp... ops) throws IllegalArgumentException {
+		return resize(src, Method.AUTOMATIC, resizeMode, rotation, targetWidth,
 				targetHeight, ops);
 	}
 
 	/**
-	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> using the given scaling
-	 * method.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param targetSize
-	 *            The target width and height (square) that you wish the image
-	 *            to fit within.
-	 * 
-	 * @return the proportionally scaled image with either a width or height of
-	 *         the given target size.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code> or if
-	 *             <code>targetSize</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			int targetSize) throws IllegalArgumentException {
-		return resize(src, scalingMethod, Mode.AUTOMATIC, targetSize,
-				targetSize, (BufferedImageOp) null);
-	}
-
-	/**
-	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> (or fitting the image to the
-	 * given WIDTH or HEIGHT depending on the {@link Mode} specified) using the
-	 * given scaling method.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param resizeMode
-	 *            Used to indicate how imgscalr should calculate the final
-	 *            target size for the image, either fitting the image to the
-	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
-	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
-	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
-	 *            proportional dimensions for the scaled image based on its
-	 *            orientation (landscape, square or portrait). Unless you have
-	 *            very specific size requirements, most of the time you just
-	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
-	 * @param targetSize
-	 *            The target width and height (square) that you wish the image
-	 *            to fit within.
-	 * 
-	 * @return the proportionally scaled image with either a width or height of
-	 *         the given target size.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code> or if
-	 *             <code>targetSize</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			Mode resizeMode, int targetSize) throws IllegalArgumentException {
-		return resize(src, scalingMethod, resizeMode, targetSize, targetSize,
-				(BufferedImageOp) null);
-	}
-
-	/**
-	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> using the given scaling
-	 * method and applying the given {@link BufferedImageOp} to the final result
-	 * before returning it if one is provided.
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height (or fitting the image to the given WIDTH or HEIGHT
+	 * explicitly, depending on the {@link Mode} specified) using the given
+	 * scaling method and apply the given {@link BufferedImageOp}s (if any) to
+	 * the result before returning it.
 	 * <p/>
-	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
-	 * hardware accelerated operations, but many of the most popular (like
-	 * {@link ConvolveOp}) are. For more information on if your image op is
-	 * hardware accelerated or not, check the source code of the underlying JDK
-	 * class that actually executes the Op code, <a href=
-	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
-	 * >sun.awt.image.ImagingLib</a>.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param targetSize
-	 *            The target width and height (square) that you wish the image
-	 *            to fit within.
-	 * @param ops
-	 *            Zero or more optional image operations (e.g. sharpen, blur,
-	 *            etc.) that can be applied to the final result before returning
-	 *            the image.
-	 * 
-	 * @return the proportionally scaled image with either a width or height of
-	 *         the given target size.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code> or if
-	 *             <code>targetSize</code> is &lt; 0.
-	 * 
-	 * @see #OP_ANTIALIAS
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			int targetSize, BufferedImageOp... ops)
-			throws IllegalArgumentException {
-		return resize(src, scalingMethod, Mode.AUTOMATIC, targetSize,
-				targetSize, ops);
-	}
-
-	/**
-	 * Resize a given image (maintaining its original proportion) to a width and
-	 * height of the given <code>targetSize</code> (or fitting the image to the
-	 * given WIDTH or HEIGHT depending on the {@link Mode} specified) using the
-	 * given scaling method and applying the given {@link BufferedImageOp} to
-	 * the final result before returning it if one is provided.
-	 * <p/>
-	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
-	 * hardware accelerated operations, but many of the most popular (like
-	 * {@link ConvolveOp}) are. For more information on if your image op is
-	 * hardware accelerated or not, check the source code of the underlying JDK
-	 * class that actually executes the Op code, <a href=
-	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
-	 * >sun.awt.image.ImagingLib</a>.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param resizeMode
-	 *            Used to indicate how imgscalr should calculate the final
-	 *            target size for the image, either fitting the image to the
-	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
-	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
-	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
-	 *            proportional dimensions for the scaled image based on its
-	 *            orientation (landscape, square or portrait). Unless you have
-	 *            very specific size requirements, most of the time you just
-	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
-	 * @param targetSize
-	 *            The target width and height (square) that you wish the image
-	 *            to fit within.
-	 * @param ops
-	 *            Zero or more optional image operations (e.g. sharpen, blur,
-	 *            etc.) that can be applied to the final result before returning
-	 *            the image.
-	 * 
-	 * @return the proportionally scaled image with either a width or height of
-	 *         the given target size.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code> or if
-	 *             <code>targetSize</code> is &lt; 0.
-	 * 
-	 * @see #OP_ANTIALIAS
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			Mode resizeMode, int targetSize, BufferedImageOp... ops)
-			throws IllegalArgumentException {
-		return resize(src, scalingMethod, resizeMode, targetSize, targetSize,
-				ops);
-	}
-
-	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height using the given scaling method.
-	 * <p/>
-	 * <strong>TIP</strong>: See the class description to understand how this
-	 * class handles recalculation of the <code>targetWidth</code> or
-	 * <code>targetHeight</code> depending on the image's orientation in order
-	 * to maintain the original proportion.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param targetWidth
-	 *            The target width that you wish the image to have.
-	 * @param targetHeight
-	 *            The target height that you wish the image to have.
-	 * 
-	 * @return the proportionally scaled image no bigger than the given width
-	 *         and height.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code>, if
-	 *             <code>targetWidth</code> is &lt; 0 or if
-	 *             <code>targetHeight</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			int targetWidth, int targetHeight) throws IllegalArgumentException {
-		return resize(src, scalingMethod, Mode.AUTOMATIC, targetWidth,
-				targetHeight, (BufferedImageOp) null);
-	}
-
-	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height (or fitting the image to the given WIDTH or HEIGHT depending on
-	 * the {@link Mode} specified) using the given scaling method.
-	 * <p/>
-	 * <strong>TIP</strong>: See the class description to understand how this
-	 * class handles recalculation of the <code>targetWidth</code> or
-	 * <code>targetHeight</code> depending on the image's orientation in order
-	 * to maintain the original proportion.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param resizeMode
-	 *            Used to indicate how imgscalr should calculate the final
-	 *            target size for the image, either fitting the image to the
-	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
-	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
-	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
-	 *            proportional dimensions for the scaled image based on its
-	 *            orientation (landscape, square or portrait). Unless you have
-	 *            very specific size requirements, most of the time you just
-	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
-	 * @param targetWidth
-	 *            The target width that you wish the image to have.
-	 * @param targetHeight
-	 *            The target height that you wish the image to have.
-	 * 
-	 * @return the proportionally scaled image no bigger than the given width
-	 *         and height.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code>, if
-	 *             <code>targetWidth</code> is &lt; 0 or if
-	 *             <code>targetHeight</code> is &lt; 0.
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			Mode resizeMode, int targetWidth, int targetHeight)
-			throws IllegalArgumentException {
-		return resize(src, scalingMethod, resizeMode, targetWidth,
-				targetHeight, (BufferedImageOp) null);
-	}
-
-	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height using the given scaling method and applying the given
-	 * {@link BufferedImageOp} to the final result before returning it if one is
-	 * provided.
-	 * <p/>
-	 * <strong>TIP</strong>: See the class description to understand how this
-	 * class handles recalculation of the <code>targetWidth</code> or
-	 * <code>targetHeight</code> depending on the image's orientation in order
-	 * to maintain the original proportion.
-	 * <p/>
-	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
-	 * hardware accelerated operations, but many of the most popular (like
-	 * {@link ConvolveOp}) are. For more information on if your image op is
-	 * hardware accelerated or not, check the source code of the underlying JDK
-	 * class that actually executes the Op code, <a href=
-	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
-	 * >sun.awt.image.ImagingLib</a>.
-	 * 
-	 * @param src
-	 *            The image that will be scaled.
-	 * @param scalingMethod
-	 *            The method used for scaling the image; preferring speed to
-	 *            quality or a balance of both.
-	 * @param targetWidth
-	 *            The target width that you wish the image to have.
-	 * @param targetHeight
-	 *            The target height that you wish the image to have.
-	 * @param ops
-	 *            Zero or more optional image operations (e.g. sharpen, blur,
-	 *            etc.) that can be applied to the final result before returning
-	 *            the image.
-	 * 
-	 * @return the proportionally scaled image no bigger than the given width
-	 *         and height.
-	 * 
-	 * @throws IllegalArgumentException
-	 *             if <code>scalingMethod</code> is <code>null</code>, if
-	 *             <code>targetWidth</code> is &lt; 0 or if
-	 *             <code>targetHeight</code> is &lt; 0.
-	 * 
-	 * @see #OP_ANTIALIAS
-	 */
-	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
-			int targetWidth, int targetHeight, BufferedImageOp... ops) {
-		return resize(src, scalingMethod, Mode.AUTOMATIC, targetWidth,
-				targetHeight, ops);
-	}
-
-	/**
-	 * Resize a given image (maintaining its proportion) to the target width and
-	 * height (or fitting the image to the given WIDTH or HEIGHT depending on
-	 * the {@link Mode} specified) using the given scaling method and applying
-	 * the given {@link BufferedImageOp} to the final result before returning it
-	 * if one is provided.
+	 * A rotation of {@link Rotation#NONE} is used.
 	 * <p/>
 	 * <strong>TIP</strong>: See the class description to understand how this
 	 * class handles recalculation of the <code>targetWidth</code> or
@@ -1022,17 +1269,97 @@ public class Scalr {
 	 *         and height.
 	 * 
 	 * @throws IllegalArgumentException
-	 *             if <code>src</code> is <code>null</code>, if
-	 *             <code>scalingMethod</code> is <code>null</code>, if
-	 *             <code>resizeMethod</code> is <code>null</code>, if
-	 *             <code>targetWidth</code> is &lt; 0 or if
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
 	 *             <code>targetHeight</code> is &lt; 0.
 	 * 
+	 * @see Method
+	 * @see Mode
 	 * @see #OP_ANTIALIAS
 	 */
 	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
 			Mode resizeMode, int targetWidth, int targetHeight,
 			BufferedImageOp... ops) throws IllegalArgumentException {
+		return resize(src, scalingMethod, resizeMode, Rotation.NONE,
+				targetWidth, targetHeight, ops);
+	}
+
+	/**
+	 * Resize a given image (maintaining its original proportion) to the target
+	 * width and height (or fitting the image to the given WIDTH or HEIGHT
+	 * explicitly, depending on the {@link Mode} specified) using the given
+	 * scaling method, apply the given {@link BufferedImageOp}s (if any) and
+	 * apply the given rotation to the result before returning it.
+	 * <p/>
+	 * <strong>TIP</strong>: See the class description to understand how this
+	 * class handles recalculation of the <code>targetWidth</code> or
+	 * <code>targetHeight</code> depending on the image's orientation in order
+	 * to maintain the original proportion.
+	 * <p/>
+	 * <strong>Performance</strong>: Not all {@link BufferedImageOp}s are
+	 * hardware accelerated operations, but many of the most popular (like
+	 * {@link ConvolveOp}) are. For more information on if your image op is
+	 * hardware accelerated or not, check the source code of the underlying JDK
+	 * class that actually executes the Op code, <a href=
+	 * "http://www.docjar.com/html/api/sun/awt/image/ImagingLib.java.html"
+	 * >sun.awt.image.ImagingLib</a>.
+	 * 
+	 * @param src
+	 *            The image that will be scaled.
+	 * @param scalingMethod
+	 *            The method used for scaling the image; preferring speed to
+	 *            quality or a balance of both.
+	 * @param resizeMode
+	 *            Used to indicate how imgscalr should calculate the final
+	 *            target size for the image, either fitting the image to the
+	 *            given width ({@link Mode#FIT_TO_WIDTH}) or fitting the image
+	 *            to the given height ({@link Mode#FIT_TO_HEIGHT}). If
+	 *            {@link Mode#AUTOMATIC} is passed in, imgscalr will calculate
+	 *            proportional dimensions for the scaled image based on its
+	 *            orientation (landscape, square or portrait). Unless you have
+	 *            very specific size requirements, most of the time you just
+	 *            want to use {@link Mode#AUTOMATIC} to "do the right thing".
+	 * @param rotation
+	 *            The rotation to be applied to the scaled image right before it
+	 *            is returned.
+	 * @param targetWidth
+	 *            The target width that you wish the image to have.
+	 * @param targetHeight
+	 *            The target height that you wish the image to have.
+	 * @param ops
+	 *            Zero or more optional image operations (e.g. sharpen, blur,
+	 *            etc.) that can be applied to the final result before returning
+	 *            the image.
+	 * 
+	 * @return the proportionally scaled image no bigger than the given width
+	 *         and height.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if <code>src</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>scalingMethod</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>resizeMode</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>rotation</code> is <code>null</code>.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetWidth</code> is &lt; 0 or if
+	 *             <code>targetHeight</code> is &lt; 0.
+	 * 
+	 * @see Method
+	 * @see Mode
+	 * @see Rotation
+	 * @see #OP_ANTIALIAS
+	 */
+	public static BufferedImage resize(BufferedImage src, Method scalingMethod,
+			Mode resizeMode, Rotation rotation, int targetWidth,
+			int targetHeight, BufferedImageOp... ops)
+			throws IllegalArgumentException {
 		if (src == null)
 			throw new IllegalArgumentException(
 					"src cannot be null, a valid BufferedImage instance must be provided.");
@@ -1042,6 +1369,9 @@ public class Scalr {
 		if (resizeMode == null)
 			throw new IllegalArgumentException(
 					"resizeMode cannot be null. A good default value is Mode.AUTOMATIC.");
+		if (rotation == null)
+			throw new IllegalArgumentException(
+					"rotation cannot be null. A good default value is Rotation.NONE.");
 		if (targetWidth < 0)
 			throw new IllegalArgumentException("targetWidth must be >= 0");
 		if (targetHeight < 0)
@@ -1191,8 +1521,8 @@ public class Scalr {
 				 * We must manually create the target image; we cannot rely on
 				 * the null-dest filter() method to create a valid destination
 				 * for us thanks to this JDK bug that has been filed for almost
-				 * a decade: http://bugs.sun.com/bugdatabase/view_bug.
-				 * do;jsessionid=33b25bf937f467791ff5792cb9dc?bug_id=4965606
+				 * a decade:
+				 * http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4965606
 				 */
 				BufferedImage dest = new BufferedImage((int) Math.round(dims
 						.getWidth()), (int) Math.round(dims.getHeight()),
@@ -1205,6 +1535,103 @@ public class Scalr {
 							(System.currentTimeMillis() - opStartTime),
 							result.getWidth(), result.getHeight(), op);
 			}
+		}
+
+		// Perform the rotation if one was requested
+		if (rotation != Rotation.NONE) {
+			/*
+			 * A 90 or -90 degree rotation will cause the height and width to
+			 * flip-flop from the original image to the rotated one.
+			 * 
+			 * Given that MOST rotations will typically be some form of a
+			 * 90-degree rotation (portrait to landscape, etc.) just assume that
+			 * here and correct it below in the switch statement if need be.
+			 */
+			int newWidth = result.getHeight();
+			int newHeight = result.getWidth();
+
+			/*
+			 * We create a transform per operation request as (oddly enough) it
+			 * ends up being faster for the VM to create, use and destroy these
+			 * instances than it is to re-use a single AffineTransform
+			 * per-thread via the AffineTransform.setTo(...) methods which was
+			 * my first choice (less object creation).
+			 * 
+			 * Unfortunately this introduces the need for ThreadLocal instances
+			 * of AffineTransforms to avoid race conditions where two or more
+			 * resize threads are manipulating the same transform before
+			 * applying it.
+			 * 
+			 * ThreadLocals are one of the #1 reasons for memory leaks in server
+			 * applications and since we have no nice way to hook into the
+			 * init/destroy Servlet cycle or any other initialization cycle for
+			 * this library to automatically call ThreadLocal.remove() to avoid
+			 * the memory leak, it would have made using this library *safely*
+			 * on the server side much harder.
+			 * 
+			 * So we opt for creating individual transforms per rotation op and
+			 * let the VM clean them up in a GC.
+			 */
+			AffineTransform tx = new AffineTransform();
+
+			switch (rotation) {
+			case CLOCKWISE:
+				// Reminder: newWidth == result.getHeight() at this point
+				tx.translate(newWidth, 0);
+				tx.rotate(Math.toRadians(90));
+
+				break;
+
+			case COUNTER_CLOCKWISE:
+				// Reminder: newHeight == result.getWidth() at this point
+				tx.translate(0, newHeight);
+				tx.rotate(Math.toRadians(-90));
+				break;
+
+			case FLIP:
+				/*
+				 * This is the one rotation case where the new width and height
+				 * will be the same as the original image, so reset the values
+				 * from the defaults we set above.
+				 */
+				newWidth = result.getWidth();
+				newHeight = result.getHeight();
+
+				tx.translate(newWidth, newHeight);
+				tx.rotate(Math.toRadians(180));
+				break;
+			}
+
+			/*
+			 * Create our target image we will render the rotated result to. At
+			 * this point the resultant image has already been put into the best
+			 * image type so we can just copy that without trying to
+			 * re-determine the most effective image type like scaleImage(...)
+			 * has to do.
+			 */
+			BufferedImage rotatedImage = new BufferedImage(newWidth, newHeight,
+					result.getType());
+			Graphics2D g2d = (Graphics2D) rotatedImage.createGraphics();
+
+			/*
+			 * Render the resultant image to our new rotatedImage buffer,
+			 * applying the AffineTransform that we calculated above during
+			 * rendering so the pixels from the old position to the new
+			 * transposed positions are mapped correctly.
+			 */
+			g2d.drawImage(result, tx, null);
+			g2d.dispose();
+
+			/*
+			 * Before re-assigning the new result to be returned to our rotated
+			 * image, explicitly notify the VM that you are done with any
+			 * resources being used by the old resultant image that we don't
+			 * need anymore.
+			 */
+			result.flush();
+
+			// Reassign the result to our rotated image before returning it.
+			result = rotatedImage;
 		}
 
 		if (DEBUG) {
