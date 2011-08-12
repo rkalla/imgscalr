@@ -174,6 +174,7 @@ import javax.imageio.ImageIO;
  * href="http://ubuntuforums.org/archive/index.php/t-1060128.html">here</a>.
  * 
  * @author Riyad Kalla (software@thebuzzmedia.com)
+ * @since 1.1
  */
 public class Scalr {
 	/**
