@@ -1539,6 +1539,11 @@ public class Scalr {
 
 		// Perform the rotation if one was requested
 		if (rotation != Rotation.NONE) {
+			if (DEBUG)
+				log("Applying %s rotation to image...", rotation);
+
+			long rotStartTime = System.currentTimeMillis();
+
 			/*
 			 * A 90 or -90 degree rotation will cause the height and width to
 			 * flip-flop from the original image to the rotated one.
@@ -1632,6 +1637,11 @@ public class Scalr {
 
 			// Reassign the result to our rotated image before returning it.
 			result = rotatedImage;
+
+			if (DEBUG)
+				log("\t%s Rotation Applied in %d ms, Resultant Image [width=%d, height=%d]",
+						rotation, (System.currentTimeMillis() - rotStartTime),
+						result.getWidth(), result.getHeight());
 		}
 
 		if (DEBUG) {
