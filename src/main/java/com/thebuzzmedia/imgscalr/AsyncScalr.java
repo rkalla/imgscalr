@@ -70,6 +70,13 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * @since 3.2
  */
 public class AsyncScalr {
+	/**
+	 * Default thread count used to initialize the internal
+	 * {@link ExecutorService} if a count isn't specified via
+	 * {@link #setServiceThreadCount(int)} before this class is used.
+	 * <p/>
+	 * Default value is <code>2</code>.
+	 */
 	public static final int DEFAULT_THREAD_COUNT = 2;
 
 	private static ExecutorService service;
