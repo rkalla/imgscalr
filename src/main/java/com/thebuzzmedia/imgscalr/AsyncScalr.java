@@ -30,12 +30,13 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * requirement be common enough that it should be integrated directly into the
  * imgscalr library for everyone to benefit from.
  * <p/>
- * This class wraps all scale operation calls in new {@link Callable} instances
- * that are submitted to an internal {@link ExecutorService} for execution at a
- * later date. A {@link Future} is returned to the caller representing the task
- * that will perform the scale operation. {@link Future#get()} or
- * {@link Future#get(long, TimeUnit)} can be used to block on the returned
- * <code>Future</code>, waiting for the scale operation to complete.
+ * Every method in this class wraps the mirrored calls in the {@link Scalr}
+ * class in new {@link Callable} instances that are submitted to an internal
+ * {@link ExecutorService} for execution at a later date. A {@link Future} is
+ * returned to the caller representing the task that will perform the scale
+ * operation. {@link Future#get()} or {@link Future#get(long, TimeUnit)} can be
+ * used to block on the returned <code>Future</code>, waiting for the scale
+ * operation to complete and return the resultant {@link BufferedImage}.
  * <p/>
  * This design provides the following features:
  * <ul>
