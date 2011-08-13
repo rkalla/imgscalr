@@ -4,6 +4,57 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
+3.2
+	* Added support for asynchronous & rate-limited scaling operations via the
+	AsyncScalr class.
+	
+	The AsyncScalr class wraps the parent Scalr class and submits scale jobs to
+	an internal ExecutorService. The executor service can be used to serialize
+	and queue up scaling operations to avoid blowing the heap and overloading the
+	underlying host on a busy, multi-user system (e.g. a web app running imgscalr).
+	
+	AsyncScalr by default uses a fixed-size ThreadPoolExecutor that can be modified
+	at run time to any tuned level of threads the caller desires (default 2). The
+	default settings are intended to be safe/efficient to use out of the box on 
+	most all systems.
+	
+	Additionally, AsyncScalr can be configured to use *any* ExecutorService 
+	implementation passed to it so callers have ultimate control over how the 
+	AsyncScalr processes jobs if they need/want it.
+	
+	Typically it is a good idea to roughly map # of Scaling Threads to the # of 
+	Cores on the server, especially on a server with plenty of memory and a large
+	heap for the VM.
+	
+	If you are running inside of a smaller VM heap or lower-memory server (regardless
+	of core count) you will want to limit the number of simultaneous scale operations
+	so as not to saturate the heap during scaling when the images are read into
+	internal BufferedImage instances in VM memory.
+
+	* Added support for Rotation to the library. You can now specify the following
+	rotations to be applied to your image:
+	
+	Rotation.NONE - No rotation.
+	Rotation.CLOCKWISE - Clockwise (90 degrees to the right) rotation.
+	Rotation.COUNTER_CLOCKWISE - Counter-clockwise (90 degrees to the left) rotation.
+	Rotation.FLIP - Flip the image (180 degrees rotation).
+	
+	The rotation is performed as tightly and efficiently as possible, explicitly
+	cleaning up temporary resources created during the operation.
+	
+	* API was simplified as duplicate methods without the vararg parameter were
+	removed (these were effectively duplicates of the vararg methods make the
+	API longer than it needed to be).
+	
+	* Corrected a multitude of incorrect Javadoc comments pertaining to @throws
+	conditions.
+	
+	* Rewrote the method Javadoc. Manually reviewing uncovered too many copy-paste
+	discrepencies that left out important information that would be helpful in
+	a  Javadoc popup in an IDE while using imgscalr.
+	
+	* All new code heavily commented.
+
 3.1
 	* You can now specify Mode.FIT_TO_WIDTH or Mode.FIT_TO_HEIGHT behaviors
 	when resizing an image to get imgscalr to treat one dimension as the primary
