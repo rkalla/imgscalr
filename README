@@ -50,7 +50,7 @@ Changelog
 	conditions.
 	
 	* Rewrote the method Javadoc. Manually reviewing uncovered too many copy-paste
-	discrepencies that left out important information that would be helpful in
+	discrepancies that left out important information that would be helpful in
 	a  Javadoc popup in an IDE while using imgscalr.
 	
 	* All new code heavily commented.
