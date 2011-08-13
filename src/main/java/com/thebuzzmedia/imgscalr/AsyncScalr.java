@@ -56,9 +56,53 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * {@link ExecutorService} for processing scale operations for maximum
  * flexibility; otherwise this class utilizes a fixed {@link ThreadPoolExecutor}
  * via {@link Executors#newFixedThreadPool(int)} that will create the given
- * number of threads (typically mapped 1:1 to the number of cores on the
- * machine) and let them sit idle, waiting for work.
+ * number of threads and let them sit idle, waiting for work.
  * <h3>Performance</h3>
+ * When tuning this class for optimal performance, benchmarking your particular
+ * hardware is the best approach. For some rough guidelines though, there are
+ * two resources you want to watch closely:
+ * <ol>
+ * <li>JVM Heap Memory (Assume physical machine memory is always sufficiently
+ * large)</li>
+ * <li># of CPU Cores</li>
+ * </ol>
+ * You never want to allocate more scaling threads than you have CPU cores and
+ * on a sufficiently busy host where some of the cores may be busy running a
+ * database or a web server, you will want to allocate even less scaling
+ * threads.
+ * <p/>
+ * So as a maximum you would never want more scaling threads than CPU cores in
+ * any situation and less so on a busy server.
+ * <p/>
+ * If you allocate more threads than you have available CPU cores, your scaling
+ * operations will slow down as the CPU will spend a considerable amount of time
+ * context-switching between threads on the same core trying to finish all the
+ * tasks in parallel. You might still be tempted to do this because of the I/O
+ * delay some threads will encounter reading images off disk, but when you do
+ * your own benchmarking you'll likely find (as I did) that the actual disk I/O
+ * necessary to pull the image data off disk is a much smaller portion of the
+ * execution time than the actual scaling operations.
+ * <p/>
+ * If you are executing on a storage medium that is unexpectedly slow and I/O is
+ * a considerable portion of the scaling operation, feel free to try using more
+ * threads than CPU cores to see if that helps; but in most normal cases, it
+ * will only slow down all other parallel scaling operations.
+ * <p/>
+ * As for memory, every time an image is scaled it is decoded into a
+ * {@link BufferedImage} and stored in the JVM Heap space (decoded image
+ * instances are always larger than the source images on-disk). For larger
+ * images, that can use up quite a bit of memory. You will need to benchmark
+ * your particular use-cases on your hardware to get an idea of where the sweet
+ * spot is for this; if you are operating within tight memory bounds, you may
+ * want to limit simultaneous scaling operations to 1 or 2 regardless of the
+ * number of cores just to avoid having too many {@link BufferedImage} instances
+ * in JVM Heap space at the same time.
+ * <p/>
+ * These are rough metrics and behaviors to give you an idea of how best to tune
+ * this class for your deployment, but nothing can replacement writing a small
+ * Java class that scales a handful of images in a number of different ways and
+ * testing that directly on your deployment hardware. *
+ * <h3>Resource Overhead</h3>
  * The {@link ExecutorService} utilized by this class won't be initialized until
  * the class is referenced for the first time or explicitly set with one of the
  * setter methods. More specifically, if you have no need for asynchronous image
