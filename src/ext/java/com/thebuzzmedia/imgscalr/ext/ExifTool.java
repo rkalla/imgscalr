@@ -1,19 +1,113 @@
 package com.thebuzzmedia.imgscalr.ext;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringTokenizer;
 
+/**
+ * Class used to provide a Java-like wrapper to Phil Harvey's excellent <a
+ * href="http://www.sno.phy.queensu.ca/~phil/exiftool">ExifTool</a>.
+ * <p/>
+ * There are a number of other basic wrappers to ExifTool available online, but
+ * most of them just abstract out the actual process execution logic, but do no
+ * other work to make using ExifTool from within Java any easier or more
+ * intuitive.
+ * <p/>
+ * This class is an attempt at making ExifTool integration into a Java app
+ * seamless and feel just like using a Java library.
+ * <h3>Performance</h3>
+ * Extra care is taken to ensure minimal to no garbage creation or unnecessary
+ * CPU overhead while communicating with the external process.
+ * <p/>
+ * As is typical with external process communication in Java, a litany of
+ * temporary {@link String} objects are created then disposed or even multiplied
+ * via a {@link String#split(String)} operation just to process the content
+ * coming back from the external process.
+ * <p/>
+ * Additionally, extra care is taken to utilize the most optimal code paths when
+ * initiating and using the external process, for example, the
+ * {@link ProcessBuilder#command(List)} method is used to avoid the copying of
+ * array elements when {@link ProcessBuilder#command(String...)} is used and
+ * avoiding the (hidden) use of {@link StringTokenizer} when
+ * {@link Runtime#exec(String)} is called.
+ * <p/>
+ * All of this effort was done to ensure that imgscalr and its supporting
+ * classes continue to provide best-of-breed performance and memory utilization
+ * in long running/high performance environments (e.g. web applications).
+ * <h3>Why ExifTool?</h3>
+ * <a href="http://www.sno.phy.queensu.ca/~phil/exiftool">ExifTool</a> is
+ * written in Perl and requires an external process call from Java to make use
+ * of.
+ * <p/>
+ * While this would normally preclude a piece of software from inclusion into
+ * the imgscalr library (more complex integration), there is no other image
+ * metadata piece of software available as robust, complete and well-tested as
+ * ExifTool. In addition, ExifTool already runs on all major platforms
+ * (including Windows), so there was not a lack of portability introduced by
+ * providing an integration for it.
+ * <p/>
+ * Allowing it to be used from Java is a boon to any Java project that needs the
+ * ability to read/write image-metadata from almost <a
+ * href="http://www.sno.phy.queensu.ca/~phil/exiftool/#supported">any image or
+ * video file</a> format.
+ * <h3>Alternatives</h3>
+ * If integration with an external Perl process is something your app cannot do
+ * and you still need image metadata-extraction capability, Drew Noakes has
+ * written the 2nd most robust image metadata library I have come across: <a
+ * href="http://drewnoakes.com/drewnoakes.com/code/exif/">Metadata Extractor</a>
+ * that you might want to look at.
+ * 
+ * @author Riyad Kalla (software@thebuzzmedia.com)
+ * @since 4.0
+ */
 public class ExifTool {
+	/**
+	 * Flag used to indicate if debugging output has been enabled by setting the
+	 * "<code>imgscalr.ext.exiftool.debug</code>" system property to
+	 * <code>true</code>. This value will be <code>false</code> if the "
+	 * <code>imgscalr.ext.exiftool.debug</code>" system property is undefined or
+	 * set to <code>false</code>.
+	 * <p/>
+	 * This system property can be set on startup with:<br/>
+	 * <code>
+	 * -Dimgscalr.ext.exiftool.debug=true
+	 * </code> or by calling {@link System#setProperty(String, String)} before
+	 * this class is loaded.
+	 * <p/>
+	 * Default value is <code>false</code>.
+	 */
 	public static final Boolean DEBUG = Boolean
 			.getBoolean("imgscalr.ext.exiftool.debug");
 
+	/**
+	 * The absolute path to the ExifTool executable on the host system running
+	 * this class as defined by the "<code>imgscalr.ext.exiftool.path</code>"
+	 * system property.
+	 * <p/>
+	 * If ExifTool is on your system path and named "exiftool", leaving this
+	 * value unchanged will work fine. If ExifTool is named something else or
+	 * not in the system path, then this property will need to be set before
+	 * using this class.
+	 * <p/>
+	 * This system property can be set on startup with:<br/>
+	 * <code>
+	 * -Dimgscalr.ext.exiftool.path=/path/to/exiftool
+	 * </code> or by calling {@link System#setProperty(String, String)} before
+	 * this class is loaded.
+	 * <p/>
+	 * On Windows be sure to double-escape the path to the tool, for example:
+	 * <code>
+	 * -Dimgscalr.ext.exiftool.path=C:\\Tools\\exiftool.exe
+	 * </code>
+	 * <p/>
+	 * Default value is <code>exiftool</code>.
+	 */
 	public static final String EXIF_TOOL_PATH = System.getProperty(
 			"imgscalr.ext.exiftool.path", "exiftool");
 
@@ -22,15 +116,21 @@ public class ExifTool {
 	 * prefix helps make it easier both visually and programmatically to scan
 	 * log files for messages produced by this library.
 	 * <p/>
-	 * The value is "[imgscalr] " (including the space).
+	 * The value is "<code>[imgscalr.ext.exiftool] </code>" (including the
+	 * space).
 	 */
 	public static final String LOG_PREFIX = "[imgscalr.ext.exiftool] ";
 
-	public static final Map<Tag, String> EMPTY_MAP = Collections.emptyMap();
+	private static final int DEFAULT_BUFFER_SIZE = 1024;
 
 	/**
 	 * Enum used to specify the different supported tags that can be extracted
 	 * from an image using ExifTool.
+	 * <p/>
+	 * ExifTool is capable of extracting almost every image metadata tag known
+	 * to man, but this class makes an attempt at simplifying the most common
+	 * cases (the 80% rule) and defining them as simple Enums that can be used
+	 * easily and intuitively.
 	 * 
 	 * @see <a
 	 *      href="http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/index.html">Full
@@ -43,13 +143,13 @@ public class ExifTool {
 				"-Orientation"), MAKE("-Make"), MODEL("-Model"), TITLE(
 				"-XPTitle"), AUTHOR("-XPAuthor"), SUBJECT("-XPSubject"), KEYWORDS(
 				"-XPKeywords"), COMMENT("-XPComment"), RATING("-Rating"), RATING_PERCENT(
-				"-RatingPercent"), GPS_LATITUDE("-GPSLatitude"), GPS_LATITUDE_REF(
-				"-GPSLatitudeRef"), GPS_LONGITUDE("-GPSLongitude"), GPS_LONGITUDE_REF(
-				"-GPSLongitudeRef"), GPS_ALTITUDE("-GPSAltitude"), GPS_ALTITUDE_REF(
-				"-GPSAltitudeRef"), GPS_SPEED("-GPSSpeed"), GPS_SPEED_REF(
-				"-GPSSpeedRef"), GPS_PROCESS_METHOD("-GPSProcessingMethod"), GPS_BEARING(
-				"-GPSDestBearing"), GPS_BEARING_REF("-GPSDestBearingRef"), DATE_TIME_ORIGINAL(
-				"-DateTimeOriginal");
+				"-RatingPercent"), DATE_TIME_ORIGINAL("-DateTimeOriginal"), GPS_LATITUDE(
+				"-GPSLatitude"), GPS_LATITUDE_REF("-GPSLatitudeRef"), GPS_LONGITUDE(
+				"-GPSLongitude"), GPS_LONGITUDE_REF("-GPSLongitudeRef"), GPS_ALTITUDE(
+				"-GPSAltitude"), GPS_ALTITUDE_REF("-GPSAltitudeRef"), GPS_SPEED(
+				"-GPSSpeed"), GPS_SPEED_REF("-GPSSpeedRef"), GPS_PROCESS_METHOD(
+				"-GPSProcessingMethod"), GPS_BEARING("-GPSDestBearing"), GPS_BEARING_REF(
+				"-GPSDestBearingRef");
 
 		private String name;
 
@@ -58,57 +158,169 @@ public class ExifTool {
 		}
 	}
 
-	public static Map<Tag, String> getImageMeta(File image, Tag... tags)
-			throws IllegalArgumentException {
-		if (image == null)
-			throw new IllegalArgumentException("image cannot be null");
-		if (!image.canRead())
-			throw new SecurityException(
-					"Insufficient permissions to read given image: "
-							+ image.getAbsolutePath());
+	private boolean stayOpen;
 
-		long startTime = System.currentTimeMillis();
-		Map<Tag, String> resultMap = EMPTY_MAP;
+	private char[] buffer;
+	private List<String> args;
 
-		if (tags != null && tags.length > 0) {
-			List<String> args = new ArrayList<String>();
-			args.add(EXIF_TOOL_PATH);
-			args.add("-S");
-			args.add("-n");
+	private InputStreamReader reader;
+	private OutputStreamWriter writer;
 
-			for (int i = 0; i < tags.length; i++)
-				args.add(tags[i].name);
+	public ExifTool() {
+		this(false);
+	}
 
-			args.add(image.getAbsolutePath());
+	public ExifTool(boolean stayOpen) {
+		this.stayOpen = stayOpen;
 
+		args = new ArrayList<String>(64);
+		buffer = new char[DEFAULT_BUFFER_SIZE];
+	}
+
+	public boolean isOpen() {
+		return stayOpen;
+	}
+
+	public void close() {
+		// No-op if ExifTool never used -stay_open True in the first place.
+		if (!stayOpen)
+			return;
+
+		try {
+			if (DEBUG)
+				log("Closing persistent ExifTool process, issuing -stay_open False directive...");
+
+			// Tell the ExifTool process to exit.
+			writer.write("-stay_open\nFalse\n");
+			writer.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
 			try {
-				// Execute the command
-				Process proc = new ProcessBuilder(args).start();
-				BufferedReader reader = new BufferedReader(
-						new InputStreamReader(proc.getInputStream()));
+				if (DEBUG)
+					log("Closing read/write streams to the exited ExifTool process...");
 
 				/*
-				 * TODO: Implement a more robust and efficient parsing method
-				 * using a char[] buffer and manual index chopping; avoid regex
-				 * and String creation/splitting.
+				 * No matter what happened above, close the streams to the
+				 * (hopefully) exited process.
 				 */
+				writer.close();
+				reader.close();
+			} catch (Exception e) {
+				// no-op, we don't care.
+			}
 
-				String line = null;
+			// Null the stream references.
+			writer = null;
+			reader = null;
+		}
 
-				while ((line = reader.readLine()) != null) {
-					System.out.println("> " + line);
+		// Update the open state.
+		stayOpen = false;
+
+		if (DEBUG)
+			log("Persistent ExifTool process successfully closed.");
+	}
+
+	public Map<Tag, String> getImageMeta(File image, Tag... tags)
+			throws IllegalArgumentException, SecurityException, IOException {
+		if (image == null)
+			throw new IllegalArgumentException(
+					"image cannot be null and must be a valid stream of image data.");
+		if (!image.canRead())
+			throw new SecurityException(
+					"Unable to read the given image ["
+							+ image.getAbsolutePath()
+							+ "], ensure that the file permissions are correct and that the executing process is able to read the given image.");
+
+		long startTime = System.currentTimeMillis();
+		Map<Tag, String> resultMap = new HashMap<ExifTool.Tag, String>(
+				tags.length * 3);
+
+		if (DEBUG)
+			log("Quering %d tags for values from image: %s", tags.length,
+					image.getAbsolutePath());
+
+		// Ensure there is work to do first.
+		if (tags.length > 0) {
+			// Clear process args
+			args.clear();
+
+			if (stayOpen) {
+				/*
+				 * If this is our first time calling getImageMeta with a
+				 * stayOpen connection, set up the persistent process and run it
+				 * so it is ready to receive commands from us.
+				 */
+				if (reader == null && writer == null) {
+					args.add(EXIF_TOOL_PATH);
+					args.add("-stay_open");
+					args.add("True");
+					args.add("-@");
+					args.add("-");
+
+					// Begin the persistent ExifTool process.
+					open(args);
 				}
 
-				// Prepare the result map.
-				resultMap = new HashMap<ExifTool.Tag, String>(tags.length * 3);
-			} catch (IOException e) {
-				e.printStackTrace();
+				writer.write("-n\n"); // numeric output
+				writer.write("-S\n"); // compact output
+				writer.write("-fast\n"); // do not search to EOF
+
+				for (int i = 0; i < tags.length; i++) {
+					writer.write(tags[i].name);
+					writer.write("\n");
+				}
+
+				writer.write(image.getAbsolutePath());
+				writer.write("\n");
+
+				// Run ExifTool on our file with all the given arguments.
+				writer.write("-execute\n");
+				writer.flush();
+			} else {
+				/*
+				 * Since we are not using a stayOpen process, we need to setup
+				 * the execution arguments completely each time.
+				 */
+				args.add(EXIF_TOOL_PATH);
+
+				args.add("-n"); // numeric output
+				args.add("-S"); // compact output
+				args.add("-fast"); // do not search to EOF
+
+				for (int i = 0; i < tags.length; i++)
+					args.add(tags[i].name);
+
+				args.add(image.getAbsolutePath());
+
+				// Run the ExifTool with our args.
+				open(args);
+			}
+
+			/*
+			 * Regardless of how we executed ExifTool above, reading and parsing
+			 * the reply is the same; so begin reading back the reply.
+			 */
+			int charsRead = 0;
+			int charsKept = 0;
+
+			/*
+			 * Keep filling the buffer (without overwriting any kept content)
+			 * until we hit the end of stream.
+			 */
+			while ((charsRead = reader.read(buffer, charsKept, buffer.length
+					- charsKept)) != -1) {
+				System.out
+						.println(new String(buffer, 0, charsRead + charsKept));
+
+				// if (line.equals("{ready}"))
+				// break;
 			}
 		}
 
 		if (DEBUG)
-			log("Processed '%s' in %d ms [queried %d tags, found %d values]",
-					image.getAbsolutePath(),
+			log("\tImage Meta Processed in %d ms [queried %d tags and found %d values]",
 					(System.currentTimeMillis() - startTime), tags.length,
 					resultMap.size());
 
@@ -143,5 +355,23 @@ public class ExifTool {
 	protected static void log(String message, Object... params) {
 		if (DEBUG)
 			System.out.printf(LOG_PREFIX + message + '\n', params);
+	}
+
+	protected void open(List<String> args) throws RuntimeException {
+		Process proc = null;
+
+		try {
+			proc = new ProcessBuilder(args).start();
+		} catch (Exception e) {
+			throw new RuntimeException(
+					"Unable to start the ExifTool process using the following execution arguments "
+							+ args
+							+ ". Ensure ExifTool is installed, runs correctly and is a relatively current release.",
+					e);
+		}
+
+		// Setup read/write streams to the new process.
+		reader = new InputStreamReader(proc.getInputStream());
+		writer = new OutputStreamWriter(proc.getOutputStream());
 	}
 }
