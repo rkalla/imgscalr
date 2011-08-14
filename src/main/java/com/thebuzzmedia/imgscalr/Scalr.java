@@ -179,9 +179,9 @@ import javax.imageio.ImageIO;
 public class Scalr {
 	/**
 	 * Flag used to indicate if debugging output has been enabled by setting the
-	 * "imgscalr.debug" system property to <code>true</code>. This value will be
-	 * <code>false</code> if the "imgscalr.debug" system property is undefined
-	 * or set to <code>false</code>.
+	 * "<code>imgscalr.debug</code>" system property to <code>true</code>. This
+	 * value will be <code>false</code> if the "<code>imgscalr.debug</code>"
+	 * system property is undefined or set to <code>false</code>.
 	 * <p/>
 	 * This system property can be set on startup with:<br/>
 	 * <code>
