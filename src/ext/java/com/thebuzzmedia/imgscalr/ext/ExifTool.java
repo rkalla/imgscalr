@@ -187,39 +187,22 @@ public class ExifTool {
 			return;
 
 		try {
-			if (DEBUG)
-				log("Closing persistent ExifTool process, issuing -stay_open False directive...");
+			log("Attempting to close persistent ExifTool process, issuing -stay_open\nFalse\n...");
 
 			// Tell the ExifTool process to exit.
 			writer.write("-stay_open\nFalse\n");
 			writer.flush();
+
+			log("\tSuccessful");
 		} catch (IOException e) {
 			e.printStackTrace();
 		} finally {
-			try {
-				if (DEBUG)
-					log("Closing read/write streams to the exited ExifTool process...");
-
-				/*
-				 * No matter what happened above, close the streams to the
-				 * (hopefully) exited process.
-				 */
-				writer.close();
-				reader.close();
-			} catch (Exception e) {
-				// no-op, we don't care.
-			}
-
-			// Null the stream references.
-			writer = null;
-			reader = null;
+			closeStreams();
 		}
 
 		// Update the open state.
 		stayOpen = false;
-
-		if (DEBUG)
-			log("Persistent ExifTool process successfully closed.");
+		log("Persistent ExifTool process successfully shut down.");
 	}
 
 	public Map<Tag, String> getImageMeta(File image, Tag... tags)
@@ -260,7 +243,7 @@ public class ExifTool {
 					args.add("-");
 
 					// Begin the persistent ExifTool process.
-					open(args);
+					runProcess(args);
 				}
 
 				writer.write("-n\n"); // numeric output
@@ -295,7 +278,7 @@ public class ExifTool {
 				args.add(image.getAbsolutePath());
 
 				// Run the ExifTool with our args.
-				open(args);
+				runProcess(args);
 			}
 
 			/*
@@ -317,6 +300,16 @@ public class ExifTool {
 				// if (line.equals("{ready}"))
 				// break;
 			}
+
+			/*
+			 * If we are not using a persistent ExifTool process, then after
+			 * running the command above, the process exited in which case we
+			 * need to clean our streams up since it no longer exists. If we
+			 * were using a persistent ExifTool process, leave the streams open
+			 * for future calls.
+			 */
+			if (!stayOpen)
+				closeStreams();
 		}
 
 		if (DEBUG)
@@ -357,7 +350,7 @@ public class ExifTool {
 			System.out.printf(LOG_PREFIX + message + '\n', params);
 	}
 
-	protected void open(List<String> args) throws RuntimeException {
+	protected void runProcess(List<String> args) throws RuntimeException {
 		Process proc = null;
 
 		try {
@@ -373,5 +366,29 @@ public class ExifTool {
 		// Setup read/write streams to the new process.
 		reader = new InputStreamReader(proc.getInputStream());
 		writer = new OutputStreamWriter(proc.getOutputStream());
+	}
+
+	protected void closeStreams() {
+		try {
+			log("\tClosing Read stream...");
+			reader.close();
+			log("\t\tSuccessful");
+		} catch (Exception e) {
+			// no-op, just try to close it.
+		}
+
+		try {
+			log("\tClosing Write stream...");
+			writer.close();
+			log("\t\tSuccessful");
+		} catch (Exception e) {
+			// no-op, just try to close it.
+		}
+
+		// Null the stream references.
+		reader = null;
+		writer = null;
+
+		log("\tRead/Write streams successfully closed.");
 	}
 }
