@@ -198,7 +198,7 @@ public class Scalr {
 	 * prefix helps make it easier both visually and programmatically to scan
 	 * log files for messages produced by this library.
 	 * <p/>
-	 * The value is "[imgscalr] " (including the space).
+	 * The value is "<code>[imgscalr] </code>" (including the space).
 	 */
 	public static final String LOG_PREFIX = "[imgscalr] ";
 
