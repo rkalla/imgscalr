@@ -294,11 +294,33 @@ public class ExifTool {
 			 */
 			while ((charsRead = reader.read(buffer, charsKept, buffer.length
 					- charsKept)) != -1) {
-				System.out
-						.println(new String(buffer, 0, charsRead + charsKept));
+				// Calculate the length of all the content in the buffer.
+				int length = charsKept + charsRead;
 
-				// if (line.equals("{ready}"))
-				// break;
+				System.out.println(new String(buffer, 0, length));
+
+				/*
+				 * TODO: This end logic has to be tested on Mac and Linux -- on
+				 * Windows ET is writing out \r\n before and after {ready} --
+				 * need to figure out if this is ET's behavior OR if it is just
+				 * writing out the platform's default newline.
+				 */
+
+				/*
+				 * If we are using a persistent ExifTool process, ET lets us
+				 * know that it is done responding by writing out a \n{ready} to
+				 * the output stream which we need to check for, because EOS is
+				 * never hit and we will block forever waiting for it.
+				 */
+				if (stayOpen && buffer[length - 3] == '}'
+						&& buffer[length - 4] == 'y'
+						&& buffer[length - 5] == 'd'
+						&& buffer[length - 6] == 'a'
+						&& buffer[length - 7] == 'e'
+						&& buffer[length - 8] == 'r'
+						&& buffer[length - 9] == '{'
+						&& buffer[length - 10] == '\n')
+					break;
 			}
 
 			/*
