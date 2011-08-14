@@ -102,7 +102,7 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * These are rough metrics and behaviors to give you an idea of how best to tune
  * this class for your deployment, but nothing can replacement writing a small
  * Java class that scales a handful of images in a number of different ways and
- * testing that directly on your deployment hardware. *
+ * testing that directly on your deployment hardware.
  * <h3>Resource Overhead</h3>
  * The {@link ExecutorService} utilized by this class won't be initialized until
  * the class is referenced for the first time or explicitly set with one of the
