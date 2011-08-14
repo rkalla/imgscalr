@@ -135,6 +135,9 @@ public class ExifTool {
 	 * @see <a
 	 *      href="http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/index.html">Full
 	 *      Tag List</a>
+	 * 
+	 * @author Riyad Kalla (software@thebuzzmedia.com)
+	 * @since 3.2
 	 */
 	public enum Tag {
 		ISO("-ISO"), APERTURE("-ApertureValue"), SHUTTER_SPEED(
