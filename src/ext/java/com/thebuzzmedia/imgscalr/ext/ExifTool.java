@@ -16,6 +16,8 @@ import java.util.regex.Pattern;
  * TODO: Is there a way to discover the PID of the ExifTool process this class
  * spawns so it can keep track of it in Close and issue a taskkill (win) or
  * kill -9 (linux/mac/unix) in an attempt to clean up stray processes if necessary?
+ * 
+ * http://www.tech-recipes.com/rx/446/xp_kill_windows_process_command_line_taskkill/
  */
 
 /*
@@ -28,6 +30,10 @@ import java.util.regex.Pattern;
 /**
  * Class used to provide a Java-like wrapper to Phil Harvey's excellent <a
  * href="http://www.sno.phy.queensu.ca/~phil/exiftool">ExifTool</a>.
+ * <p/>
+ * Instances of this class are <strong>not</strong> Thread-safe. Both the
+ * instance of this class and external ExifTool process maintain state specific
+ * to the current operation.
  * <p/>
  * There are a number of other basic wrappers to ExifTool available online, but
  * most of them just abstract out the actual process execution logic, but do no
@@ -42,7 +48,15 @@ import java.util.regex.Pattern;
  * >8.36</a> added a new persistent-process feature that allows ExifTool to stay
  * running in a daemon mode and continue accepting commands via a file or stdin.
  * This new mode is controlled via the <code>-stay_open True/False</code>
- * command line argument.
+ * command line argument and in a busy system can offer speed improvements of
+ * <strong>40-60x</strong> (yes, really that much).
+ * <p/>
+ * This feature was added to ExifTool shortly after user <a
+ * href="http://www.christian-etter.de/?p=458">Christian Etter discovered</a>
+ * the overhead for starting up a new Perl interpreter each time ExifTool is
+ * loaded accounts for roughly <a href=
+ * "http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,1402.msg6121.html#msg6121"
+ * >98.4% of the total runtime</a>.
  * <p/>
  * If a version of ExifTool earlier than 8.36 is used, the
  * <code>-stay_open</code> command line argument is ignored and the code path
@@ -51,11 +65,41 @@ import java.util.regex.Pattern;
  * <p/>
  * To protect against this nasty side effect, this class, when configured to use
  * the <code>stayOpen</code> mode, will make an attempt at verifying the version
- * of ExifTool <em>before</em> the first call to the external tool. Once the
- * version has been verified, the check will not be performed again for the life
- * of the instance. If the version is confirmed to be lower than the required
- * ExifTool version to support that feature, an exception is thrown to notify
- * the caller.
+ * of ExifTool <em>before</em> the first call is made to the external tool. Once
+ * the version has been verified, the check will not be performed again for the
+ * life of the instance. If the version is confirmed to be lower than the
+ * required ExifTool version to support that feature, a {@link RuntimeException}
+ * is thrown to notify the caller of the situation.
+ * <p/>
+ * At that point the developer can either upgrade ExifTool or not use the
+ * <code>-stay_open</code> support provided by this class to workaround the
+ * exception.
+ * <h3>Usage</h3>
+ * Assuming ExifTool is installed on the host system correctly and either in the
+ * system path or {@link #EXIF_TOOL_PATH} is set to point at it, using this
+ * class to communicate with ExifTool is as simple as creating an instance and
+ * using it in a Thread-safe way: <code>ExifTool tool = new ExifTool()</code>.
+ * <p/>
+ * Calls to {@link #getImageMeta(File, Tag...)} will automatically spin up an
+ * external ExifTool process to handle the request which will exit when done.
+ * The results from the ExifTool process are parsed and returned in a
+ * {@link Map} associating every given {@link Tag} that had a value with a
+ * {@link String} value that was found in the image. Tags which were not found
+ * in the image are not included in the returned map. It is also up to the
+ * caller to determine how best to process the string values (e.g. parse them
+ * into numbers, etc.)
+ * <p/>
+ * If you plan on using the <code>-stay_open</code> daemon support added in
+ * ExifTool 8.36 and later, simply pass <code>true</code> to the constructor of
+ * this class. This will cause a daemon version of ExifTool to be spun up and
+ * reused for all subsequent calls to {@link #getImageMeta(File, Tag...)}.
+ * <p/>
+ * <strong>WARNING</strong>: When you use this mode, you must be sure to
+ * explicitly call {@link #close()} when you are done using ExifTool so this
+ * class can have a chance to stop the external process and cleanup the
+ * read/write streams used by this class to communicate with it. Forgetting to
+ * do this will not only leak resources inside the VM, but leak
+ * <code>exiftool</code> processes in the host OS.
  * <h3>Performance</h3>
  * Extra care is taken to ensure minimal object creation or unnecessary CPU
  * overhead while communicating with the external process.
