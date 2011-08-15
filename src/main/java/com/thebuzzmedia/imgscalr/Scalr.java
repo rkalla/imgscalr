@@ -791,7 +791,7 @@ public class Scalr {
 	 *             if <code>scalingMethod</code> is <code>null</code>.
 	 * @throws IllegalArgumentException
 	 *             if <code>resizeMode</code> is <code>null</code>.
-	 * @throw IllegalArgumentException if <code>targetSize</code> is &lt; 0.
+	 * @throws IllegalArgumentException if <code>targetSize</code> is &lt; 0.
 	 * 
 	 * @see Method
 	 * @see Mode
@@ -857,7 +857,7 @@ public class Scalr {
 	 *             if <code>resizeMode</code> is <code>null</code>.
 	 * @throws IllegalArgumentException
 	 *             if <code>rotation</code> is <code>null</code>.
-	 * @throw IllegalArgumentException if <code>targetSize</code> is &lt; 0.
+	 * @throws IllegalArgumentException if <code>targetSize</code> is &lt; 0.
 	 * 
 	 * @see Method
 	 * @see Mode
