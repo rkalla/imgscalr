@@ -237,8 +237,8 @@ public class AsyncScalr {
 			ThreadPoolExecutor tpe = (ThreadPoolExecutor) AsyncScalr.service;
 
 			// Set the new min/max thread counts for the pool.
-			tpe.setCorePoolSize(threadCount);
 			tpe.setMaximumPoolSize(threadCount);
+			tpe.setCorePoolSize(threadCount);
 		} else
 			setService(Executors.newFixedThreadPool(threadCount));
 	}
