@@ -7,19 +7,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.regex.Pattern;
-
-/*
- * TODO: Add a few static checkExifTool methods to this class that this class
- * can both use and external processes (e.g. imgscalr Rotation.AUTO) can use to
- * verify the installation of ExifTool before trying to use this library and 
- * having something explode.
- */
 
 /**
  * Class used to provide a Java-like wrapper to Phil Harvey's excellent <a
@@ -171,6 +162,16 @@ public class ExifTool {
 			.getBoolean("imgscalr.ext.exiftool.debug");
 
 	/**
+	 * Prefix to every log message this library logs. Using a well-defined
+	 * prefix helps make it easier both visually and programmatically to scan
+	 * log files for messages produced by this library.
+	 * <p/>
+	 * The value is "<code>[imgscalr.ext.exiftool] </code>" (including the
+	 * space).
+	 */
+	public static final String LOG_PREFIX = "[imgscalr.ext.exiftool] ";
+
+	/**
 	 * The absolute path to the ExifTool executable on the host system running
 	 * this class as defined by the "<code>imgscalr.ext.exiftool.path</code>"
 	 * system property.
@@ -203,23 +204,20 @@ public class ExifTool {
 			"imgscalr.ext.exiftool.path", "exiftool");
 
 	/**
-	 * Prefix to every log message this library logs. Using a well-defined
-	 * prefix helps make it easier both visually and programmatically to scan
-	 * log files for messages produced by this library.
-	 * <p/>
-	 * The value is "<code>[imgscalr.ext.exiftool] </code>" (including the
-	 * space).
-	 */
-	public static final String LOG_PREFIX = "[imgscalr.ext.exiftool] ";
-
-	protected static final Set<Feature> SUPPORTED_FEATURES = new HashSet<ExifTool.Feature>();
-
-	/**
 	 * Compiled {@link Pattern} of ": " used to split compact output from
 	 * ExifTool evenly into name/value pairs.
 	 */
 	protected static final Pattern TAG_VALUE_PATTERN = Pattern.compile(": ");
 
+	/**
+	 * Static list of args used to execute ExifTool using the '-ver' flag in
+	 * order to get it to print out its version number. Used by the
+	 * {@link #checkFeatureSupport(Feature...)} method to check all the required
+	 * feature versions.
+	 * <p/>
+	 * Defined here as a <code>static final</code> list because it is used every
+	 * time and never changes.
+	 */
 	protected static final List<String> VERIFY_FEATURE_ARGS = new ArrayList<String>(
 			2);
 
@@ -228,8 +226,57 @@ public class ExifTool {
 		VERIFY_FEATURE_ARGS.add("-ver");
 	}
 
+	/**
+	 * Map shared across all instances of this class that maintains the state of
+	 * {@link Feature}s and if they are supported or not (supported=true,
+	 * unsupported=false) by the underlying native ExifTool process being used
+	 * in conjunction with this class.
+	 * <p/>
+	 * If a {@link Feature} is missing from the map (has no <code>true</code> or
+	 * <code>false</code> flag associated with it, but <code>null</code>
+	 * instead) then that means that feature has not been checked for support
+	 * yet and this class will know to call
+	 * {@link #checkFeatureSupport(Feature...)} on it to determine its supported
+	 * state.
+	 * <p/>
+	 * For efficiency reasons, individual {@link Feature}s are checked for
+	 * support one time during each run of the VM and never again during the
+	 * session of that running VM.
+	 */
+	protected static final Map<Feature, Boolean> FEATURE_SUPPORT_MAP = new HashMap<ExifTool.Feature, Boolean>();
+
+	/**
+	 * Enum used to define the different kinds of features in the native
+	 * ExifTool executable that this class can help you take advantage of.
+	 * <p/>
+	 * These flags are different from {@link Tag}s in that a "feature" is
+	 * determined to be a special functionality of the underlying ExifTool
+	 * executable that requires a different code-path in this class to take
+	 * advantage of; for example, <code>-stay_open True</code> support.
+	 * 
+	 * @author Riyad Kalla (software@thebuzzmedia.com)
+	 * @since 4.0
+	 */
 	public enum Feature {
+		/**
+		 * Enum used to specify that you wish to launch the underlying ExifTool
+		 * process with <code>-stay_open True</code> support turned on that this
+		 * class can then take advantage of.
+		 * <p/>
+		 * Required ExifTool version is <code>8.36</code> or higher.
+		 */
 		STAY_OPEN("8.36");
+
+		/**
+		 * Used to get the version of ExifTool required by this feature in order
+		 * to work.
+		 * 
+		 * @return the version of ExifTool required by this feature in order to
+		 *         work.
+		 */
+		public String getVersion() {
+			return version;
+		}
 
 		private String version;
 
@@ -442,46 +489,56 @@ public class ExifTool {
 		}
 	}
 
-	private boolean stayOpen;
-	private boolean stayOpenSupportVerified;
+	private boolean open;
 
 	private List<String> args;
-
-	private BufferedReader reader;
-	private OutputStreamWriter writer;
+	private IOStream streams;
 
 	public ExifTool() {
 		this((Feature[]) null);
 	}
 
-	/*
-	 * TODO: Change stayOpen to a Feature enum that can be passed in so it is
-	 * more future proof AND change the check method to a static
-	 * "checkFeatureSupport" method or something like that.
-	 * 
-	 * Then change the stayOpenSupportVerified to some other boolean[] that maps
-	 * to each feature defined to ensure each one is supported.
-	 */
-	public ExifTool(Feature... features) {
-		featureSet = new HashSet<ExifTool.Feature>();
+	public ExifTool(Feature... features) throws UnsupportedFeatureException {
+		if (features != null && features.length > 0) {
+			/*
+			 * Process all features to ensure we checked them for support in the
+			 * installed version of ExifTool. If the feature has already been
+			 * checked before, this method will return immediately.
+			 */
+			checkFeatureSupport(features);
 
-		for (int i = 0; i < features.length; i++)
-			featureSet.add(features[i]);
+			/*
+			 * Now we need to verify that all the features requested for this
+			 * instance of ExifTool to use WERE supported after all.
+			 */
+			for (int i = 0; i < features.length; i++) {
+				Feature f = features[i];
 
-		// TODO: remove
-		this.stayOpen = stayOpen;
-		this.stayOpenSupportVerified = false;
+				/*
+				 * If the feature is not supported, throw an exception to the
+				 * caller because it means this feature cannot be utilized with
+				 * the current install of ExifTool on the host system.
+				 */
+				if (!FEATURE_SUPPORT_MAP.get(f).booleanValue())
+					throw new UnsupportedFeatureException(f);
+			}
+		}
 
+		open = false;
 		args = new ArrayList<String>(64);
 	}
 
 	public boolean isOpen() {
-		return stayOpen;
+		return open;
 	}
 
 	public void close() {
-		// No-op if ExifTool never used -stay_open True in the first place.
-		if (!stayOpen)
+		/*
+		 * no-op if the underlying process and streams have already been closed
+		 * OR if stayOpen was never used in the first place in which case
+		 * nothing is open right now anyway.
+		 */
+		if (!open)
 			return;
 
 		/*
@@ -490,26 +547,26 @@ public class ExifTool {
 		 * to shut down or destroy, otherwise we need to close down all the
 		 * resources in use.
 		 */
-		if (reader == null && writer == null) {
-			log("\tThis ExifTool instance was never used so no external process or streams were ever created (nothing to clean up, we can just exit).");
+		if (streams == null) {
+			log("\tThis ExifTool instance was never used so no external process or streams were ever created (nothing to clean up, we will just exit).");
 		} else {
 			try {
 				log("\tAttempting to close ExifTool daemon process, issuing '-stay_open\\nFalse\\n' command...");
 
 				// Tell the ExifTool process to exit.
-				writer.write("-stay_open\nFalse\n");
-				writer.flush();
+				streams.writer.write("-stay_open\nFalse\n");
+				streams.writer.flush();
 
 				log("\t\tSuccessful");
 			} catch (IOException e) {
 				e.printStackTrace();
 			} finally {
-				closeStreams();
+				streams.close();
 			}
 		}
 
-		// Update the open state.
-		stayOpen = false;
+		streams = null;
+		open = false;
 		log("\tExifTool daemon process successfully terminated.");
 	}
 
@@ -518,6 +575,9 @@ public class ExifTool {
 		if (image == null)
 			throw new IllegalArgumentException(
 					"image cannot be null and must be a valid stream of image data.");
+		if (tags == null || tags.length == 0)
+			throw new IllegalArgumentException(
+					"tags cannot be null and must contain 1 or more Tag to query the image for.");
 		if (!image.canRead())
 			throw new SecurityException(
 					"Unable to read the given image ["
@@ -525,6 +585,11 @@ public class ExifTool {
 							+ "], ensure that the image exists at the given path and that the executing Java process has permissions to read it.");
 
 		long startTime = System.currentTimeMillis();
+
+		/*
+		 * Create a result map big enough to hold results for each of the tags
+		 * and avoid collisions while inserting.
+		 */
 		Map<Tag, String> resultMap = new HashMap<ExifTool.Tag, String>(
 				tags.length * 3);
 
@@ -532,112 +597,118 @@ public class ExifTool {
 			log("Querying %d tags from image: %s", tags.length,
 					image.getAbsolutePath());
 
-		// Ensure there is work to do first.
-		if (tags.length > 0) {
-			// Clear process args
-			args.clear();
+		/*
+		 * Using ExifTool in daemon mode (-stay_open True) executes different
+		 * code paths below. So establish the flag for this once and it is
+		 * reused a multitude of times later in this method to figure out where
+		 * to branch to.
+		 */
+		boolean stayOpen = FEATURE_SUPPORT_MAP.get(Feature.STAY_OPEN)
+				.booleanValue();
 
-			if (stayOpen) {
-				log("\tUsing ExifTool in daemon mode (-stay_open True)...");
+		// Clear process args
+		args.clear();
 
-				/*
-				 * If this is our first time calling getImageMeta with a
-				 * stayOpen connection, set up the persistent process and run it
-				 * so it is ready to receive commands from us.
-				 */
-				if (reader == null && writer == null) {
-					log("\tStarting daemon ExifTool process and creating read/write streams (this only happens once)...");
-
-					args.add(EXIF_TOOL_PATH);
-					args.add("-stay_open");
-					args.add("True");
-					args.add("-@");
-					args.add("-");
-
-					// Begin the persistent ExifTool process.
-					runProcess(args);
-				}
-
-				log("\tStreaming arguments to ExifTool process...");
-
-				writer.write("-n\n"); // numeric output
-				writer.write("-S\n"); // compact output
-				writer.write("-fast\n"); // do not search to EOF
-
-				for (int i = 0; i < tags.length; i++) {
-					writer.write('-');
-					writer.write(tags[i].name);
-					writer.write("\n");
-				}
-
-				writer.write(image.getAbsolutePath());
-				writer.write("\n");
-
-				log("\tExecuting ExifTool...");
-
-				// Run ExifTool on our file with all the given arguments.
-				writer.write("-execute\n");
-				writer.flush();
-			} else {
-				log("\tUsing ExifTool in non-daemon mode (-stay_open False)...");
-
-				/*
-				 * Since we are not using a stayOpen process, we need to setup
-				 * the execution arguments completely each time.
-				 */
-				args.add(EXIF_TOOL_PATH);
-
-				args.add("-n"); // numeric output
-				args.add("-S"); // compact output
-				args.add("-fast"); // do not search to EOF
-
-				for (int i = 0; i < tags.length; i++)
-					args.add("-" + tags[i].name);
-
-				args.add(image.getAbsolutePath());
-
-				// Run the ExifTool with our args.
-				runProcess(args);
-			}
-
-			log("\tReading response back from ExifTool...");
-
-			String line = null;
-
-			while ((line = reader.readLine()) != null) {
-				String[] pair = TAG_VALUE_PATTERN.split(line);
-
-				if (pair != null && pair.length == 2) {
-					// Determine the tag represented by this value.
-					Tag tag = Tag.forName(pair[0]);
-
-					// Store the tag and its associated value in the result map.
-					resultMap.put(tag, pair[1]);
-					log("\t\tRead Tag [name=%s, value=%s]", tag.name, pair[1]);
-				}
-
-				/*
-				 * When using a persistent ExifTool process, it terminates its
-				 * output to us with a {ready} clause, we need to look for it
-				 * and break from this loop when we see it otherwise this
-				 * process will hang.
-				 */
-				if (stayOpen && line.equals("{ready}"))
-					break;
-			}
-
-			log("\tDone reading ExifTool response.");
+		if (stayOpen) {
+			log("\tUsing ExifTool in daemon mode (-stay_open True)...");
 
 			/*
-			 * If we are not using a persistent ExifTool process, then after
-			 * running the command above, the process exited in which case we
-			 * need to clean our streams up since it no longer exists. If we
-			 * were using a persistent ExifTool process, leave the streams open
-			 * for future calls.
+			 * If this is our first time calling getImageMeta with a stayOpen
+			 * connection, set up the persistent process and run it so it is
+			 * ready to receive commands from us.
 			 */
-			if (!stayOpen)
-				closeStreams();
+			if (streams == null) {
+				log("\tStarting daemon ExifTool process and creating read/write streams (this only happens once)...");
+
+				args.add(EXIF_TOOL_PATH);
+				args.add("-stay_open");
+				args.add("True");
+				args.add("-@");
+				args.add("-");
+
+				// Begin the persistent ExifTool process.
+				streams = startExifToolProcess(args);
+			}
+
+			log("\tStreaming arguments to ExifTool process...");
+
+			streams.writer.write("-n\n"); // numeric output
+			streams.writer.write("-S\n"); // compact output
+			streams.writer.write("-fast\n"); // do not search to EOF
+
+			for (int i = 0; i < tags.length; i++) {
+				streams.writer.write('-');
+				streams.writer.write(tags[i].name);
+				streams.writer.write("\n");
+			}
+
+			streams.writer.write(image.getAbsolutePath());
+			streams.writer.write("\n");
+
+			log("\tExecuting ExifTool...");
+
+			// Run ExifTool on our file with all the given arguments.
+			streams.writer.write("-execute\n");
+			streams.writer.flush();
+		} else {
+			log("\tUsing ExifTool in non-daemon mode (-stay_open False)...");
+
+			/*
+			 * Since we are not using a stayOpen process, we need to setup the
+			 * execution arguments completely each time.
+			 */
+			args.add(EXIF_TOOL_PATH);
+
+			args.add("-n"); // numeric output
+			args.add("-S"); // compact output
+			args.add("-fast"); // do not search to EOF
+
+			for (int i = 0; i < tags.length; i++)
+				args.add("-" + tags[i].name);
+
+			args.add(image.getAbsolutePath());
+
+			// Run the ExifTool with our args.
+			streams = startExifToolProcess(args);
 		}
+
+		log("\tReading response back from ExifTool...");
+
+		String line = null;
+
+		while ((line = streams.reader.readLine()) != null) {
+			String[] pair = TAG_VALUE_PATTERN.split(line);
+
+			if (pair != null && pair.length == 2) {
+				// Determine the tag represented by this value.
+				Tag tag = Tag.forName(pair[0]);
+
+				// Store the tag and its associated value in the result map.
+				resultMap.put(tag, pair[1]);
+				log("\t\tRead Tag [name=%s, value=%s]", tag.name, pair[1]);
+			}
+
+			/*
+			 * When using a persistent ExifTool process, it terminates its
+			 * output to us with a "{ready}" clause on a new line, we need to
+			 * look for it and break from this loop when we see it otherwise
+			 * this process will hang indefinitely blocking on the input stream
+			 * with no data to read.
+			 */
+			if (stayOpen && line.equals("{ready}"))
+				break;
+		}
+
+		log("\tDone reading ExifTool response.");
+
+		/*
+		 * If we are not using a persistent ExifTool process, then after running
+		 * the command above, the process exited in which case we need to clean
+		 * our streams up since it no longer exists. If we were using a
+		 * persistent ExifTool process, leave the streams open for future calls.
+		 */
+		if (!stayOpen)
+			streams.close();
 
 		if (DEBUG)
 			log("\tImage Meta Processed in %d ms [queried %d tags and found %d values]",
@@ -678,47 +749,90 @@ public class ExifTool {
 	}
 
 	/**
-	 * TODO: This should be static and run ONCE for every instance of this class
-	 * type because the EXIF_TOOL_PATH used to execute points at the same
-	 * version of the executable every time, no need to keep testing the same
-	 * executable.
+	 * Used to verify the version of ExifTool installed is a high enough version
+	 * to support the given features.
+	 * <p/>
+	 * This method runs the command "<code>exiftool -ver</code>" to get the
+	 * version of the installed ExifTool and then compares that version to the
+	 * least required version specified by the given features.
+	 * 
+	 * @param features
+	 *            The features whose required versions will be checked against
+	 *            the installed ExifTool for support.
 	 * 
 	 * @throws RuntimeException
+	 *             if any exception occurs communicating with the external
+	 *             ExifTool process spun up in order to check its version.
 	 */
-	protected static boolean verifyFeatureSupport(Feature feature)
-			throws IllegalArgumentException, RuntimeException {
-		if (feature == null)
-			throw new IllegalArgumentException("feature cannot be null");
+	protected static void checkFeatureSupport(Feature... features)
+			throws RuntimeException {
+		// Ensure there is work to do.
+		if (features == null || features.length == 0)
+			return;
 
-		boolean supported = false;
-		log("\tVerifying external ExifTool support for feature: %s", feature);
+		log("\tChecking %d features for support in the external ExifTool install...");
 
-		// Execute 'exiftool -ver'
-		IOStream streams = startExifToolProcess(VERIFY_FEATURE_ARGS);
+		for (int i = 0; i < features.length; i++) {
+			Feature f = features[i];
 
-		String ver = null;
+			/*
+			 * Check if the given feature has not been confirmed to be supported
+			 * or unsupported yet (not in our support map).
+			 * 
+			 * If the feature is not in our map, then it hasn't been checked for
+			 * support yet, otherwise there is a true/false status for it in the
+			 * map already indicating if it is supported or not.
+			 */
+			if (!FEATURE_SUPPORT_MAP.containsKey(f)) {
+				log("\t\tChecking feature %s for support, requires ExifTool version %s or higher...",
+						f, f.version);
 
-		try {
-			// Read the single-line reply (version number)
-			ver = streams.reader.readLine();
+				String ver = null;
 
-			// Close r/w streams to exited process.
-			streams.close();
-		} catch (IOException e) {
-			// no-op, nothing to report we couldn't comm with the proc.
+				try {
+					// Execute 'exiftool -ver'
+					IOStream streams = startExifToolProcess(VERIFY_FEATURE_ARGS);
+
+					// Read the single-line reply (version number)
+					ver = streams.reader.readLine();
+
+					// Close r/w streams to exited process.
+					streams.close();
+				} catch (Exception e) {
+					/*
+					 * no-op, while it is important to know that we could launch
+					 * the proc (startExifToolProcess call worked) but couldn't
+					 * communicate with it, the context with which this method
+					 * is called is from the constructor of this class which
+					 * would just wrap this exception and discard it anyway.
+					 * 
+					 * the caller will realize there is something wrong with the
+					 * ExifTool process communication as soon as they make their
+					 * first call to getImageMeta in which case whatever was
+					 * causing the exception here will popup there and then need
+					 * to be corrected.
+					 * 
+					 * This is an edge case that should only happen in really
+					 * rare/horrible scenarios, so making this method easier to
+					 * use is more important.
+					 */
+				}
+
+				Boolean supported = Boolean.FALSE;
+
+				// Ensure the version found is >= the required version.
+				if (ver != null && ver.compareTo(f.version) >= 0) {
+					supported = Boolean.TRUE;
+					log("\t\t\tFound ExifTool version %s, feature %s is SUPPORTED.",
+							ver, f);
+				} else
+					log("\t\t\tFound ExifTool version %s, feature %s is NOT SUPPORTED.",
+							ver, f);
+
+				// Update feature support map
+				FEATURE_SUPPORT_MAP.put(f, supported);
+			}
 		}
-
-		// Ensure the version found is >= the required version.
-		if (ver != null && ver.compareTo(feature.version) >= 0) {
-			supported = true;
-
-			log("\t\tFeature SUPPORTED, required ExifTool version %s or later and found version %s.",
-					feature.version, ver);
-		} else
-			log("\t\tFeature NOT SUPPORTED, required ExifTool version %s or later and found version %s.",
-					feature.version, ver);
-
-		return supported;
 	}
 
 	protected static IOStream startExifToolProcess(List<String> args)
@@ -754,69 +868,6 @@ public class ExifTool {
 		return streams;
 	}
 
-	/*
-	 * TODO: This should probably become a static util method as well.
-	 */
-	protected void runProcess(List<String> args) throws RuntimeException {
-		/*
-		 * Ensure we have verified stayOpen support with the installed ExifTool
-		 * version, otherwise our code path for that mode will hang.
-		 */
-		if (stayOpen && !stayOpenSupportVerified)
-			checkExifToolVersion();
-
-		Process proc = null;
-
-		try {
-			log("\tAttempting to start process: %s", args);
-
-			proc = new ProcessBuilder(args).start();
-
-			log("\t\tSuccessful");
-		} catch (Exception e) {
-			throw new RuntimeException(
-					"Unable to start the ExifTool process using the following execution arguments "
-							+ args
-							+ ". Ensure ExifTool is installed and executable using the command '"
-							+ EXIF_TOOL_PATH
-							+ "'. The path used to executed ExifTool can be adjusted using the 'imgscalr.ext.exiftool.path' system property.",
-					e);
-		}
-
-		log("\tSetting up Read/Write streams to process...");
-
-		// Setup read/write streams to the new process.
-		reader = new BufferedReader(
-				new InputStreamReader(proc.getInputStream()));
-		writer = new OutputStreamWriter(proc.getOutputStream());
-
-		log("\t\tSuccessful");
-	}
-
-	protected void closeStreams() {
-		try {
-			log("\tClosing Read stream...");
-			reader.close();
-			log("\t\tSuccessful");
-		} catch (Exception e) {
-			// no-op, just try to close it.
-		}
-
-		try {
-			log("\tClosing Write stream...");
-			writer.close();
-			log("\t\tSuccessful");
-		} catch (Exception e) {
-			// no-op, just try to close it.
-		}
-
-		// Null the stream references.
-		reader = null;
-		writer = null;
-
-		log("\tRead/Write streams successfully closed.");
-	}
-
 	static class IOStream {
 		BufferedReader reader;
 		OutputStreamWriter writer;
@@ -848,6 +899,33 @@ public class ExifTool {
 			writer = null;
 
 			log("\tRead/Write streams successfully closed.");
+		}
+	}
+
+	/**
+	 * Class used to define an exception that occurs when the caller attempts to
+	 * use a {@link Feature} that the underlying native ExifTool install does
+	 * not support (i.e. the version isn't new enough).
+	 * 
+	 * @author Riyad Kalla (software@thebuzzmedia.com)
+	 * @since 4.0
+	 */
+	public class UnsupportedFeatureException extends RuntimeException {
+		private static final long serialVersionUID = -1332725983656030770L;
+
+		private Feature feature;
+
+		public UnsupportedFeatureException(Feature feature) {
+			super(
+					"Feature ["
+							+ feature
+							+ "] requires version "
+							+ feature.version
+							+ " or higher of ExifTool. The version of ExifTool referenced by the system property 'imgscalr.ext.exiftool.path' is not high enough.");
+		}
+
+		public Feature getFeature() {
+			return feature;
 		}
 	}
 }
