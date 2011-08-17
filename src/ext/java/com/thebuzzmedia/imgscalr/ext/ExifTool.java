@@ -917,11 +917,11 @@ public class ExifTool {
 
 		public UnsupportedFeatureException(Feature feature) {
 			super(
-					"Feature ["
+					"Use of feature ["
 							+ feature
 							+ "] requires version "
 							+ feature.version
-							+ " or higher of ExifTool. The version of ExifTool referenced by the system property 'imgscalr.ext.exiftool.path' is not high enough.");
+							+ " or higher of the native ExifTool program. The version of ExifTool referenced by the system property 'imgscalr.ext.exiftool.path' is not high enough. You can either upgrade the install of ExifTool or avoid using this feature to workaround this exception.");
 		}
 
 		public Feature getFeature() {
