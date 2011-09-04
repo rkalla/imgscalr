@@ -9,6 +9,11 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
+4.0 (in progress...)
+	* Added CLI support to imgscalr. You can now run the imgscalr-lib JAR from
+	the command line via 'java -jar imgscalr-lib-4.0.jar ...' with any number
+	of arguments to process images from scripts or other non-Java languages.
+
 3.2
 	* Added support for asynchronous & rate-limited scaling operations via the
 	AsyncScalr class.
@@ -277,6 +282,11 @@ An example of how to do this looks like:
 Reference
 ---------
 Chris Campbell Incremental Scaling - http://today.java.net/pub/a/today/2007/04/03/perils-of-image-getscaledinstance.html
+
+
+Related Projects
+----------------
+ExifTool for Java - http://www.thebuzzmedia.com/software/exiftool-enhanced-java-integration-for-exiftool/
 
 
 Contact

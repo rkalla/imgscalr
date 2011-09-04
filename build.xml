@@ -13,14 +13,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 -->
-<project name="imgscalr Java Library" default="dist">
+<project name="imgscalr" default="dist">
 	<property name="dir.src" value="src/main/java" />
 	<property name="dir.bin" value="bin" />
 	<property name="dir.dist" value="dist" />
 	<property name="dir.javadoc" value="${dir.dist}/javadoc" />
 	
-	<property name="version.major" value="3" />
-	<property name="version.minor" value="2" />
+	<property name="version.major" value="4" />
+	<property name="version.minor" value="0" />
 
 	<property name="name.file" value="imgscalr-lib" />
 	<property name="name.file.javadoc" value="${name.file}-${version.major}.${version.minor}-javadoc.jar" />
@@ -35,7 +35,9 @@ limitations under the License.
 	</target>
 
 	<target name="compile" depends="clean">
-		<javac srcdir="${dir.src}" destdir="${dir.bin}" debug="true" source="1.5" target="1.5" />
+		<javac destdir="${dir.bin}" debug="true" source="1.5" target="1.5">
+			<src path="${dir.src}" />
+		</javac>
 		<copy todir="${dir.bin}">
 			<fileset dir="${dir.src}">
 				<exclude name="**/*.java" />
@@ -46,11 +48,20 @@ limitations under the License.
 	<target name="javadoc">
 		<delete dir="${dir.javadoc}" />
 		<mkdir dir="${dir.javadoc}" />
-		<javadoc sourcepath="${dir.src}" destdir="${dir.javadoc}" author="true" windowtitle="imgscalr v${version.major}.${version.minor} - Java Image Scaling Library" footer="Copyright 2011 The Buzz Media, LLC" link="http://download.oracle.com/javase/1.5.0/docs/api/" linksource="true" package="true" source="1.5" use="true" />
+		<javadoc 
+			destdir="${dir.javadoc}" author="true" windowtitle="imgscalr v${version.major}.${version.minor} - Java Image Scaling Library" 
+			footer="Copyright 2011 The Buzz Media, LLC" link="http://download.oracle.com/javase/1.5.0/docs/api/" 
+			linksource="true" package="true" source="1.5" use="true">
+			<sourcepath path="${dir.src}" />
+		</javadoc>
 	</target>
 
 	<target name="jar" depends="compile">
-		<jar basedir="${dir.bin}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.jar" compress="no" />
+		<jar 
+			manifest="${dir.bin}/META-INF/MANIFEST.MF" 
+			basedir="${dir.bin}" 
+			destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.jar" 
+			compress="no" />
 	</target>
 
 	<target name="src">

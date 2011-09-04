@@ -28,6 +28,7 @@ import java.awt.image.ColorModel;
 import java.awt.image.ConvolveOp;
 import java.awt.image.IndexColorModel;
 import java.awt.image.Kernel;
+import java.io.File;
 
 import javax.imageio.ImageIO;
 
@@ -425,6 +426,273 @@ public class Scalr {
 	public static final int THRESHOLD_QUALITY_BALANCED = 800;
 
 	/**
+	 * Used to provide command-line functionality to imgscalr so it can be
+	 * easily utilized from scripts or other non-Java sources.
+	 * <p/>
+	 * The only requirements arguments to this method are either
+	 * <code>-width</code> or <code>-height</code> and then an input image and
+	 * an output image. All other arguments are optional.
+	 * <p/>
+	 * A full list of optional arguments are:
+	 * <ul>
+	 * <li>-width X</li>
+	 * <li>-height Y</li>
+	 * <li>-method (AUTOMATIC | SPEED | BALANCED | QUALITY)</li>
+	 * <li>-mode (AUTOMATIC | FIT_TO_WIDTH | FIT_TO_HEIGHT)</li>
+	 * <li>-rotation (NONE | CLOCKWISE | COUNTER_CLOCKWISE | FLIP)</li>
+	 * <li>-antialias</li>
+	 * </ul>
+	 * A few command line examples might look like:
+	 * <ul>
+	 * <li>
+	 * <code>java -jar imgscalr-lib-<ver>.jar -width 150 /uploads/screenshot.jpg /tmp/thumbnail.jpg</code>
+	 * </li>
+	 * <li>
+	 * <code>java -jar imgscalr-lib-<ver>.jar -width 640 -height 480 -method SPEED -mode FIT_TO_WIDTH -antialias photo.jpg /tmp/thumbnail.jpg</code>
+	 * </li>
+	 * </ul>
+	 * Full usage information can be seen in the <code>printUsage</code> method
+	 * source or by running this class from the command line with no arguments.
+	 * <h3>Return Codes
+	 * <h3>
+	 * This method makes use of the following return codes:
+	 * <ol>
+	 * <li>0 - Success, ran and exited normally.</li>
+	 * <li>1 - Failure, invalid number of arguments.</li>
+	 * <li>2 - Failure, invalid argument value provided (e.g. '-width HAM' or
+	 * '-mode CELERY').</li>
+	 * <li>3 - Failure, unknown argument was provided.</li>
+	 * <li>4 - Failure, path to source image does not exist or cannot be read.</li>
+	 * <li>5 - Failure, general failure while reading or writing the image.</li>
+	 * </ol>
+	 * 
+	 * @param args
+	 *            The command line args to use.
+	 */
+	public static void main(String[] args) {
+		// Default to a successful execution.
+		int exitCode = 0;
+		String message = null;
+
+		if (args != null && args.length > 2) {
+			int width = -1;
+			int height = -1;
+			Method method = null;
+			Mode mode = null;
+			Rotation rotation = null;
+			boolean antialias = false;
+
+			/*
+			 * Stop 1 index short of the end so we can make the option-value
+			 * retrieval below easier (i+1 without a check).
+			 * 
+			 * Loop until the end or until an error condition is hit.
+			 * 
+			 * We can also do this because the last 2 arguments should be the
+			 * inFile and outFile which we don't process in this loop.
+			 */
+			for (int i = 0, end = args.length - 1; exitCode == 0 && i < end; i++) {
+				String arg = args[i];
+
+				if ("-width".equalsIgnoreCase(arg)) {
+					try {
+						width = Integer.parseInt(args[i + 1]);
+						i++;
+					} catch (Exception e) {
+						exitCode = 2;
+						message = "Invalid int value specified for -width: "
+								+ args[i + 1];
+					}
+				} else if ("-height".equalsIgnoreCase(arg)) {
+					try {
+						height = Integer.parseInt(args[i + 1]);
+						i++;
+					} catch (Exception e) {
+						exitCode = 2;
+						message = "Invalid int value specified for -height: "
+								+ args[i + 1];
+					}
+				} else if ("-method".equalsIgnoreCase(arg)) {
+					try {
+						method = Method.valueOf(args[i + 1]);
+						i++;
+					} catch (Exception e) {
+						exitCode = 2;
+						message = "Invalid String value specified for -method: "
+								+ args[i + 1];
+					}
+				} else if ("-mode".equalsIgnoreCase(arg)) {
+					try {
+						mode = Mode.valueOf(args[i + 1]);
+						i++;
+					} catch (Exception e) {
+						exitCode = 2;
+						message = "Invalid String value specified for -mode: "
+								+ args[i + 1];
+					}
+				} else if ("-rotation".equalsIgnoreCase(arg)) {
+					try {
+						rotation = Rotation.valueOf(args[i + 1]);
+						i++;
+					} catch (Exception e) {
+						exitCode = 2;
+						message = "Invalid String value specified for -rotation: "
+								+ args[i + 1];
+					}
+				} else if ("-antialias".equalsIgnoreCase(arg))
+					antialias = true;
+				else if (arg.charAt(0) == '-') {
+					exitCode = 3;
+					message = "An unknown argument [" + arg + "] was provided.";
+				}
+			}
+
+			/*
+			 * At this point we have parsed all the given arguments, now we need
+			 * to fill in (with defaults) all the values that weren't specified.
+			 */
+			if (width == -1)
+				width = height;
+			if (height == -1)
+				height = width;
+
+			if (method == null)
+				method = Method.AUTOMATIC;
+			if (mode == null)
+				mode = Mode.AUTOMATIC;
+			if (rotation == null)
+				rotation = Rotation.NONE;
+
+			String inPath = args[args.length - 2];
+			String outPath = args[args.length - 1];
+
+			File input = new File(inPath);
+			File output = new File(outPath);
+
+			if (!input.canRead()) {
+				exitCode = 4;
+				message = "Unable to read source image ["
+						+ args[args.length - 2]
+						+ "], either the path is incorrect or this process does not have read permissions to the file.";
+			} else if (exitCode == 0) {
+				try {
+					// Read file from filesystem.
+					BufferedImage image = ImageIO.read(input);
+
+					// Scale image with all the settings we parsed.
+					image = Scalr.resize(image, method, mode, rotation, width,
+							height, (antialias ? OP_ANTIALIAS : null));
+
+					// Determine the output format type.
+					String type = outPath
+							.substring(outPath.lastIndexOf('.') + 1);
+
+					// Write result to the specified output path.
+					ImageIO.write(image, type, output);
+				} catch (Exception e) {
+					e.printStackTrace();
+
+					exitCode = 5;
+					message = "An exception occurred while trying to read or write the source or destination image. See the exception above for more information.";
+				}
+			}
+		} else {
+			exitCode = 1;
+			message = "Invalid number of arguments ("
+					+ args.length
+					+ "). At least a width or height and source and destination image path must be provided.";
+		}
+
+		/*
+		 * If an error occurred above then we have a non-zero exit code, in
+		 * which case print the additional error message if there was one and
+		 * then the usage information to help the user.
+		 */
+		if (exitCode > 0) {
+			if (message != null) {
+				System.out.println(message);
+				System.out.println();
+			}
+
+			printUsage();
+		}
+
+		System.exit(exitCode);
+	}
+
+	private static void printUsage() {
+		System.out
+				.println("imgscalr - Java Image Scaling Library (c) The Buzz Media, LLC");
+		System.out
+				.println("http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/");
+		System.out
+				.println("-------------------------------------------------------------------------");
+		System.out.println("Usage");
+		System.out
+				.println("\tjava -jar imgscalr-lib-<ver>.jar [-options] <source> <destination>");
+		System.out.println("\t<source>\tPath to the source image to process.");
+		System.out
+				.println("\t<destination>\tPath where the resulting image will be written to.");
+		System.out.println("\nOptions");
+		System.out.println("\t-width\tTarget width of resized image.");
+		System.out.println("\t-height\tTarget height of resized image.");
+		System.out
+				.println("\n\tOne or both width/height values must be provided. If one dimension is missing,\n\tthe image's propotions are always honored and the missing dimension will be\n\tcalculated automatically.");
+		System.out
+				.println("\n\t-method\tScaling method to use. Effects the quality of the resulting image.");
+		System.out
+				.println("\t\t"
+						+ Method.AUTOMATIC
+						+ "\tChoose the most optimal balance between speed/quality based on image size.");
+		System.out
+				.println("\t\t"
+						+ Method.SPEED
+						+ "\t\tScale as fast as possible, sacrificing some quality to do so.");
+		System.out
+				.println("\t\t"
+						+ Method.BALANCED
+						+ "\tPerfect balance between speed/quality regardless of image size.");
+		System.out
+				.println("\t\t"
+						+ Method.QUALITY
+						+ "\t\tScale using the best-looking method, regardless of the impact on performance.");
+		System.out
+				.println("\n\t-mode\tDefines the 'fit-to' behavior used to calculate dimensions for the target image while maintaining the original image proportions.");
+		System.out
+				.println("\t\t"
+						+ Mode.AUTOMATIC
+						+ "\tHonor the primary dimension, based on orientation, and recalculate the secondary dimension.");
+		System.out
+				.println("\t\t"
+						+ Mode.FIT_TO_WIDTH
+						+ "\tRegardless of orientation, use the width as the primary fit-to dimension and recalculate the height.");
+		System.out
+				.println("\t\t"
+						+ Mode.FIT_TO_HEIGHT
+						+ "\tRegardless of orientation, use the height as the primary fit-to dimension and recalculate the width.");
+		System.out
+				.println("\n\t-rotation Rotation to apply to the resulting image.");
+		System.out.println("\t\t" + Rotation.NONE + "\t\t\tApply no rotation.");
+		System.out.println("\t\t" + Rotation.CLOCKWISE
+				+ "\t\tApply a 90-degree clockwise (right) rotation.");
+		System.out.println("\t\t" + Rotation.COUNTER_CLOCKWISE
+				+ "\tApply a 90-degree counter-clockwise (left) rotation.");
+		System.out.println("\t\t" + Rotation.FLIP
+				+ "\t\t\tApply a 180-degree (flip) rotation.");
+		System.out
+				.println("\n\t-antialias\tFlag used to indicate if the default antialiasing filter should be applied to the resulting image or not.");
+		System.out.println("\nExamples");
+		System.out
+				.println("\tjava -jar imgscalr-lib-<ver>.jar -width 150 /uploads/screenshot.jpg /tmp/thumbnail.jpg");
+		System.out
+				.println("\tjava -jar imgscalr-lib-<ver>.jar -width 640 -height 480 -method SPEED -mode FIT_TO_WIDTH -antialias photo.jpg /tmp/thumbnail.jpg");
+		System.out.println("\n");
+		System.out.println("See Javadoc for more detail:");
+		System.out
+				.println("http://www.thebuzzmedia.com/downloads/software/imgscalr/javadoc/index.html");
+	}
+
+	/**
 	 * Resize a given image (maintaining its original proportion) to a width and
 	 * height no bigger than <code>targetSize</code> and apply the given
 	 * {@link BufferedImageOp}s (if any) to the result before returning it.
@@ -791,7 +1059,8 @@ public class Scalr {
 	 *             if <code>scalingMethod</code> is <code>null</code>.
 	 * @throws IllegalArgumentException
 	 *             if <code>resizeMode</code> is <code>null</code>.
-	 * @throws IllegalArgumentException if <code>targetSize</code> is &lt; 0.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetSize</code> is &lt; 0.
 	 * 
 	 * @see Method
 	 * @see Mode
@@ -857,7 +1126,8 @@ public class Scalr {
 	 *             if <code>resizeMode</code> is <code>null</code>.
 	 * @throws IllegalArgumentException
 	 *             if <code>rotation</code> is <code>null</code>.
-	 * @throws IllegalArgumentException if <code>targetSize</code> is &lt; 0.
+	 * @throws IllegalArgumentException
+	 *             if <code>targetSize</code> is &lt; 0.
 	 * 
 	 * @see Method
 	 * @see Mode
