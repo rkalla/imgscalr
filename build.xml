@@ -19,6 +19,9 @@ limitations under the License.
 	<property name="dir.dist" value="dist" />
 	<property name="dir.javadoc" value="${dir.dist}/javadoc" />
 	
+	<property name="java.req.version" value="1.6" />
+	<property name="javadoc.link.url" value="http://download.oracle.com/javase/6/docs/api/" />
+	
 	<property name="version.major" value="4" />
 	<property name="version.minor" value="0" />
 
@@ -35,7 +38,10 @@ limitations under the License.
 	</target>
 
 	<target name="compile" depends="clean">
-		<javac destdir="${dir.bin}" debug="true" source="1.5" target="1.5">
+		<javac	destdir="${dir.bin}"
+				debug="true"
+				source="${java.req.version}"
+				target="${java.req.version}">
 			<src path="${dir.src}" />
 		</javac>
 		<copy todir="${dir.bin}">
@@ -48,10 +54,15 @@ limitations under the License.
 	<target name="javadoc">
 		<delete dir="${dir.javadoc}" />
 		<mkdir dir="${dir.javadoc}" />
-		<javadoc 
-			destdir="${dir.javadoc}" author="true" windowtitle="imgscalr v${version.major}.${version.minor} - Java Image Scaling Library" 
-			footer="Copyright 2011 The Buzz Media, LLC" link="http://download.oracle.com/javase/1.5.0/docs/api/" 
-			linksource="true" package="true" source="1.5" use="true">
+		<javadoc 	destdir="${dir.javadoc}" 
+					author="true" 
+					windowtitle="imgscalr v${version.major}.${version.minor} - Java Image Scaling Library" 
+					footer="Copyright 2011 The Buzz Media, LLC" 
+					link="${javadoc.link.url}" 
+					linksource="true" 
+					package="true" 
+					source="${java.req.version}" 
+					use="true">
 			<sourcepath path="${dir.src}" />
 		</javadoc>
 	</target>
@@ -66,14 +77,20 @@ limitations under the License.
 
 	<target name="src">
 		<delete file="${dir.dist}/${name.file}-${version.major}.${version.minor}-src.zip" />
-		<jar compress="yes" basedir="${dir.src}" destfile="${dir.dist}/${name.file.src}" />
+		<jar	compress="yes"
+				basedir="${dir.src}"
+				destfile="${dir.dist}/${name.file.src}" />
 	</target>
 
 	<target name="dist" depends="compile,javadoc,jar,src">
 		<copy file="README" todir="${dir.dist}" />
 		<copy file="LICENSE" todir="${dir.dist}" />
 		
-		<jar compress="yes" basedir="${dir.javadoc}" destfile="${dir.dist}/${name.file.javadoc}" />
-		<zip compress="yes" basedir="${dir.dist}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.zip" />
+		<jar	compress="yes" 
+				basedir="${dir.javadoc}" 
+				destfile="${dir.dist}/${name.file.javadoc}" />
+		<zip 	compress="yes" 
+				basedir="${dir.dist}" 
+				destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.zip" />
 	</target>
 </project>
