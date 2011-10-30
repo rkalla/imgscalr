@@ -25,6 +25,9 @@ Changelog
 	* [BREAKING] Rotation enum was totally redefined. All rotations were 
 	redefined in terms of 90,180,270 quadrant rotations.
 	
+	* [BREAKING] All resize(...) methods that accepted Rotation enums are 
+	removed.
+	
 	* Added apply() support for applying an arbitrary list of BufferedImageOps
 	SAFELY and efficiently working around all the bugs in the JDK pertaining
 	to BIOs.
