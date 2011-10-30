@@ -29,6 +29,7 @@ import java.awt.image.BufferedImageOp;
 import java.awt.image.ColorConvertOp;
 import java.awt.image.ColorModel;
 import java.awt.image.ConvolveOp;
+import java.awt.image.ImagingOpException;
 import java.awt.image.IndexColorModel;
 import java.awt.image.Kernel;
 import java.awt.image.RasterFormatException;
@@ -776,15 +777,16 @@ public class Scalr {
 	// }
 
 	/**
-	 * Used to apply <code>0</code> or more {@link BufferedImageOp}s to a given
-	 * {@link BufferedImage}.
+	 * Used to apply, in order, zero or more {@link BufferedImageOp}s to a given
+	 * {@link BufferedImage} and return the result.
 	 * <p/>
 	 * This implementation works around <a
 	 * href="http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4965606">a
 	 * decade-old JDK bug</a> that can cause a {@link RasterFormatException}
-	 * when applying a perfectly valid {@link BufferedImageOp}. It is
-	 * recommended you always use this method to apply any custom ops instead of
-	 * relying on directly using the op via the
+	 * when applying a perfectly valid {@link BufferedImageOp}.
+	 * <p/>
+	 * It is recommended you always use this method to apply any
+	 * {@link BufferedImageOp}s instead of relying on directly using the
 	 * {@link BufferedImageOp#filter(BufferedImage, BufferedImage)} method.
 	 * 
 	 * @param src
@@ -798,14 +800,21 @@ public class Scalr {
 	 * 
 	 * @throws IllegalArgumentException
 	 *             if <code>src</code> is <code>null</code>
+	 * @throws ImagingOpException
+	 *             if one of the {@link BufferedImageOp} fails to apply to the
+	 *             given image.
+	 * 
+	 *             // TODO: add this throws clause to ALL the other methods here
+	 *             and in AsyncSCalr
 	 */
 	public static BufferedImage apply(BufferedImage src, BufferedImageOp... ops)
-			throws IllegalArgumentException {
+			throws IllegalArgumentException, ImagingOpException {
 		if (src == null)
 			throw new IllegalArgumentException(
 					"src cannot be null, a valid BufferedImage instance must be provided.");
 
 		BufferedImage result = null;
+		boolean hasReassignedSrc = false;
 
 		// Do nothing if no ops were specified.
 		if (ops == null || ops.length == 0)
@@ -813,13 +822,49 @@ public class Scalr {
 		else {
 			log("Applying %d Image Ops", ops.length);
 
-			for (BufferedImageOp op : ops) {
+			for (int i = 0; i < ops.length; i++) {
+				BufferedImageOp op = ops[i];
+
 				// In case a null op was passed in, skip it instead of dying
 				if (op == null)
 					continue;
 
 				long startTime = System.currentTimeMillis();
-				Rectangle2D dims = op.getBounds2D(src);
+
+				/*
+				 * Must use op.getBounds instead of src.getWidth and getHeight
+				 * because we are trying to create an image big enough to hold
+				 * the result of this operation (which may be to scale the image
+				 * smaller), in that case the bounds reported by this op and the
+				 * bounds reported by the source image will be different.
+				 */
+				Rectangle2D resultBounds = op.getBounds2D(src);
+
+				/*
+				 * Java2D makes an attempt at applying most BufferedImageOps
+				 * using hardware acceleration via the ImagingLib internal
+				 * library.
+				 * 
+				 * Unfortunately may of the BufferedImageOp are written to
+				 * simply fail with an ImagingOpException if the operation
+				 * cannot be applied with no additional information about what
+				 * went wrong.
+				 * 
+				 * In internal testing, EVERY failure I've ever seen was the
+				 * result of the source image being in a poorly-supported
+				 * BufferedImage Type like BGR or ABGR (even though it was
+				 * loaded with ImageIO).
+				 * 
+				 * To avoid this nasty/stupid surprise with BufferedImageOps, we
+				 * always ensure that the src image starts in an optimally
+				 * supported format before we try and apply the filter.
+				 * 
+				 * If the image is already in an optimal format (which is the
+				 * case if previous ops have been applied OR are being applied
+				 * as the result of a scale operation), then this method below
+				 * leaves the source unchanged.
+				 */
+				src = copyToOptimalImage(src);
 
 				/*
 				 * We must manually create the target image; we cannot rely on
@@ -829,11 +874,35 @@ public class Scalr {
 				 * http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4965606
 				 */
 				BufferedImage dest = createOptimalImage(src,
-						(int) Math.round(dims.getWidth()),
-						(int) Math.round(dims.getHeight()));
+						(int) Math.round(resultBounds.getWidth()),
+						(int) Math.round(resultBounds.getHeight()));
 
-				// Update the result we will return.
+				// Perform the operation, update our result to return.
 				result = op.filter(src, dest);
+
+				/*
+				 * Flush the 'src' image ONLY IF it is one of our interim
+				 * temporary images being used when applying 2 or more
+				 * operations. We never want to flush the original image passed
+				 * in.
+				 */
+				if (hasReassignedSrc)
+					src.flush();
+
+				/*
+				 * Incase there are more operations to perform, update what we
+				 * consider the 'src' reference to our last result so on the
+				 * next iteration the next op is applied to this result and not
+				 * back against the original src passed in.
+				 */
+				src = result;
+
+				/*
+				 * Keep track of when we re-assign 'src' to an interim temporary
+				 * image, so we know when we can explicitly flush it and clean
+				 * up references on future iterations.
+				 */
+				hasReassignedSrc = true;
 
 				if (DEBUG)
 					log("\tOp Applied in %d ms, Resultant Image [width=%d, height=%d], Op: %s",
@@ -1815,6 +1884,45 @@ public class Scalr {
 	}
 
 	/**
+	 * Used to copy a {@link BufferedImage} from a non-optimal type into a new
+	 * {@link BufferedImage} instance of an optimal type.
+	 * <p/>
+	 * If <code>src</code> is already of an optimal type, then it is simply
+	 * returned unchanged.
+	 * 
+	 * @param src
+	 *            The image to copy (if necessary) into an optimally typed
+	 *            {@link BufferedImage}.
+	 * 
+	 * @return a representation of the <code>src</code> image in an optimally
+	 *         typed {@link BufferedImage}, otherwise <code>src</code> if it was
+	 *         already of an optimal type.
+	 * 
+	 * @see #createOptimalImage(BufferedImage)
+	 * @see #createOptimalImage(BufferedImage, int, int)
+	 */
+	protected static BufferedImage copyToOptimalImage(BufferedImage src) {
+		int type = src.getType();
+		BufferedImage result;
+
+		// Do nothing if the image is already in an optimal format.
+		if (type == BufferedImage.TYPE_INT_RGB
+				|| type == BufferedImage.TYPE_INT_ARGB)
+			result = src;
+		else {
+			// Create the optimal image type to render into.
+			result = createOptimalImage(src);
+
+			// Draw the image into our new optimal representation.
+			Graphics2D g2d = (Graphics2D) result.getGraphics();
+			g2d.drawImage(src, null, null);
+			g2d.dispose();
+		}
+
+		return result;
+	}
+
+	/**
 	 * Used to implement a straight-forward image-scaling operation using Java
 	 * 2D.
 	 * <p/>
@@ -1950,8 +2058,7 @@ public class Scalr {
 			 * image with one of our interim BufferedImages so we know when to
 			 * explicitly flush the interim "src" on the next cycle through.
 			 */
-			if (!hasReassignedSrc)
-				hasReassignedSrc = true;
+			hasReassignedSrc = true;
 
 			// Track how many times we go through this cycle to scale the image.
 			incrementCount++;

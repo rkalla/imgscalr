@@ -1,5 +1,6 @@
 package com.thebuzzmedia.imgscalr;
 
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
 import java.util.concurrent.Callable;
@@ -11,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.thebuzzmedia.imgscalr.Scalr.Method;
 import com.thebuzzmedia.imgscalr.Scalr.Mode;
+import com.thebuzzmedia.imgscalr.Scalr.Rotation;
 
 /**
  * Class used to provide the asynchronous versions of all the methods defined in
@@ -163,6 +165,53 @@ public class AsyncScalr {
 		return service;
 	}
 
+	public static Future<BufferedImage> apply(final BufferedImage src,
+			final BufferedImageOp... ops) throws IllegalArgumentException {
+		verifyService();
+
+		return service.submit(new Callable<BufferedImage>() {
+			public BufferedImage call() throws Exception {
+				return Scalr.apply(src, ops);
+			}
+		});
+	}
+
+	public static Future<BufferedImage> crop(final BufferedImage src,
+			final int width, final int height, final BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		verifyService();
+
+		return service.submit(new Callable<BufferedImage>() {
+			public BufferedImage call() throws Exception {
+				return Scalr.crop(src, width, height, ops);
+			}
+		});
+	}
+
+	public static Future<BufferedImage> crop(final BufferedImage src,
+			final int x, final int y, final int width, final int height,
+			final BufferedImageOp... ops) throws IllegalArgumentException {
+		verifyService();
+
+		return service.submit(new Callable<BufferedImage>() {
+			public BufferedImage call() throws Exception {
+				return Scalr.crop(src, x, y, width, height, ops);
+			}
+		});
+	}
+
+	public static Future<BufferedImage> pad(final BufferedImage src,
+			final int padding, final Color color, final BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		verifyService();
+
+		return service.submit(new Callable<BufferedImage>() {
+			public BufferedImage call() throws Exception {
+				return Scalr.pad(src, padding, color, ops);
+			}
+		});
+	}
+
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final int targetSize, final BufferedImageOp... ops)
 			throws IllegalArgumentException {
@@ -266,6 +315,18 @@ public class AsyncScalr {
 		});
 	}
 
+	public static Future<BufferedImage> rotate(final BufferedImage src,
+			final Rotation rotation, final BufferedImageOp... ops)
+			throws IllegalArgumentException {
+		verifyService();
+
+		return service.submit(new Callable<BufferedImage>() {
+			public BufferedImage call() throws Exception {
+				return Scalr.rotate(src, rotation, ops);
+			}
+		});
+	}
+
 	/**
 	 * Used to verify that the underlying <code>service</code> points at an
 	 * active {@link ExecutorService} instance that can be used by this class.
@@ -275,10 +336,19 @@ public class AsyncScalr {
 	 * {@link ThreadPoolExecutor} (using {@link #THREAD_COUNT} threads) by
 	 * assigning a new value to the <code>service</code> member variable.
 	 * <p/>
-	 * Custom implementations will want to do the same.
+	 * Custom implementations need to assign a new {@link ExecutorService}
+	 * instance to <code>service</code>, but it doesn't necessarily need to be
+	 * an instance of {@link ThreadPoolExecutor}; they are free to use the
+	 * executor of choice.
 	 */
 	protected static void verifyService() {
-		if (service == null || service.isShutdown() || service.isTerminated())
+		if (service == null || service.isShutdown() || service.isTerminated()) {
+			/*
+			 * Assigning a new value will free the previous reference to service
+			 * if it was non-null, allowing it to be GC'ed when it is done
+			 * shutting down (assuming it hadn't already).
+			 */
 			service = Executors.newFixedThreadPool(THREAD_COUNT);
+		}
 	}
 }
