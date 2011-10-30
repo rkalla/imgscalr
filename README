@@ -10,9 +10,79 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 Changelog
 ---------
 4.0 (in progress...)
+	* [BREAKING] Java 6 is now required for using imgscalr. 
+	
+	The reason for this is because imgscalr not includes specific types of 
+	ResizeOp and ColorConvertOps that actually segfault the latest Java 5 VM 
+	when applied, but run fine in Java 6 and 7.
+	
+	imgscalr cannot knowingly ship VM-segfaulting code that could would 
+	introduce a potentially	devastating situation into client applications.
+	
+	This decision was not made lightly, but with Java 5 end-of-lifed and Java 6
+	being out for 5 years, it seemed like a reasonable requirement.
+
+	* [BREAKING] Rotation enum was totally redefined. All rotations were 
+	redefined in terms of 90,180,270 quadrant rotations.
+	
+	* Added apply() support for applying an arbitrary list of BufferedImageOps
+	SAFELY and efficiently working around all the bugs in the JDK pertaining
+	to BIOs.
+	
+	* Added rotate() support.
+	
+	* Added crop() support.
+	
+	* Added pad() support.
+	
+	* Support for rotate/crop/pad were all added to AsyncScalr so these operations
+	can all be asynchronously performed as well.
+	
+	* Added support for horizontal and vertical flipping of the image via the
+	Rotation enum and new rotate() method.
+	
+	* Added pre-defined OP_DARKER and OP_BRIGHTER operations that can be applied
+	to any image to make them darker or brighter (respectively) by 10%.
+	
+	* Added Mode.FIT_EXACT to support (for the first time) scaling images 
+	forced into a specific given dimension instead of honoring the image's
+	orientation and proportions automatically. 
+	
+	* AsyncScalr's use of ExecutorService was rewritten; no more support for
+	passing in custom ExecutorService implementations -- just extend the class
+	and specify your own logic.
+	
+	* AsyncScalr.DEFAULT_THREAD_COUNT was removed and replaced with THREAD_COUNT
+	that can be customized and set via system properties.
+	
+	AsyncScalr.service is now protected and managed by a single protected method
+	that both can be easily overwritten by a subclass and customized if desired.
+	
+	* Simplified the resize() calls as a result of making all operations discrete;
+	8 duplicate methods accepting "rotation" arguments were removed.
+	
+	* Optimized the application of BufferedImageOps.
+	
+	* Memory optimized the application of 2 or more BufferedImageOps (interim
+	images are explicitly cleaned up just like in incremental scaling).
+	
+	* Optimized log() implementation to avoid StringBuilder creation and string
+	concatenation. Should be significant run-time savings over time if you are
+	running in an environment with debugging turned on.
+	
 	* Added CLI support to imgscalr. You can now run the imgscalr-lib JAR from
 	the command line via 'java -jar imgscalr-lib-4.0.jar ...' with any number
 	of arguments to process images from scripts or other non-Java languages.
+	
+	* [TIP] Because image operations have been made discrete operations
+	(e.g. flip, rotate, crop, etc.) imgscalr cannot automatically .flush() the
+	src images. Callers must remember to do this to help avoid leaking memory
+	or making the GC life harder.
+	
+	To be clear, imgscalr will continue to flush interim graphics that it manages
+	internally, but if you are doing a lot of discrete image ops yourself, don't
+	forget to cleanup.
+	
 
 3.2
 	* Added support for asynchronous & rate-limited scaling operations via the
