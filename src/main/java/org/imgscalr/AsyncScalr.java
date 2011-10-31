@@ -1,4 +1,4 @@
-package com.thebuzzmedia.imgscalr;
+package org.imgscalr;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -12,9 +12,10 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import com.thebuzzmedia.imgscalr.Scalr.Method;
-import com.thebuzzmedia.imgscalr.Scalr.Mode;
-import com.thebuzzmedia.imgscalr.Scalr.Rotation;
+import org.imgscalr.Scalr.Method;
+import org.imgscalr.Scalr.Mode;
+import org.imgscalr.Scalr.Rotation;
+
 
 // TODO: update class javadoc
 
