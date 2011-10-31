@@ -8,6 +8,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -19,20 +20,22 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
 
 /**
  * Class used to provide the asynchronous versions of all the methods defined in
- * {@link Scalr} for the purpose of offering more control over the scaling and
- * ordering of a large number of scale operations.
+ * {@link Scalr} for the purpose of efficiently handling large amounts of image
+ * operations via a select number of processing threads.
  * <p/>
  * Given that image-scaling operations, especially when working with large
  * images, can be very hardware-intensive (both CPU and memory), in large-scale
  * deployments (e.g. a busy web application) it becomes increasingly important
  * that the scale operations performed by imgscalr be manageable so as not to
  * fire off too many simultaneous operations that the JVM's heap explodes and
- * runs out of memory.
+ * runs out of memory or pegs the CPU on the host machine, staving all other
+ * running processes.
  * <p/>
  * Up until now it was left to the caller to implement their own serialization
- * or limiting logic to handle these use-cases, but it was determined that this
- * requirement be common enough that it should be integrated directly into the
- * imgscalr library for everyone to benefit from.
+ * or limiting logic to handle these use-cases. Given imgscalr's popularity in
+ * web applications it was determined that this requirement be common enough
+ * that it should be integrated directly into the imgscalr library for everyone
+ * to benefit from.
  * <p/>
  * Every method in this class wraps the mirrored calls in the {@link Scalr}
  * class in new {@link Callable} instances that are submitted to an internal
@@ -40,7 +43,8 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * returned to the caller representing the task that will perform the scale
  * operation. {@link Future#get()} or {@link Future#get(long, TimeUnit)} can be
  * used to block on the returned <code>Future</code>, waiting for the scale
- * operation to complete and return the resultant {@link BufferedImage}.
+ * operation to complete and return the resultant {@link BufferedImage} to the
+ * caller.
  * <p/>
  * This design provides the following features:
  * <ul>
@@ -52,16 +56,10 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * optimize the host system (e.g. 1 scale thread per core).</li>
  * <li>No need to worry about overloading the host system with too many scale
  * operations, they will simply queue up in this class and execute in-order.</li>
- * <li>Synchronous/blocking behavior can still be achieved by calling
- * <code>get()</code> or <code>get(long, TimeUnit)</code> immediately on the
- * returned {@link Future} from any of the methods below.</li>
+ * <li>Synchronous/blocking behavior can still be achieved (if desired) by
+ * calling <code>get()</code> or <code>get(long, TimeUnit)</code> immediately on
+ * the returned {@link Future} from any of the methods below.</li>
  * </ul>
- * 
- * This class also allows callers to provide their own (custom)
- * {@link ExecutorService} for processing scale operations for maximum
- * flexibility; otherwise this class utilizes a fixed {@link ThreadPoolExecutor}
- * via {@link Executors#newFixedThreadPool(int)} that will create the given
- * number of threads and let them sit idle, waiting for work.
  * <h3>Performance</h3>
  * When tuning this class for optimal performance, benchmarking your particular
  * hardware is the best approach. For some rough guidelines though, there are
@@ -89,9 +87,10 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * execution time than the actual scaling operations.
  * <p/>
  * If you are executing on a storage medium that is unexpectedly slow and I/O is
- * a considerable portion of the scaling operation, feel free to try using more
- * threads than CPU cores to see if that helps; but in most normal cases, it
- * will only slow down all other parallel scaling operations.
+ * a considerable portion of the scaling operation (e.g. S3 or EBS volumes),
+ * feel free to try using more threads than CPU cores to see if that helps; but
+ * in most normal cases, it will only slow down all other parallel scaling
+ * operations.
  * <p/>
  * As for memory, every time an image is scaled it is decoded into a
  * {@link BufferedImage} and stored in the JVM Heap space (decoded image
@@ -109,15 +108,43 @@ import com.thebuzzmedia.imgscalr.Scalr.Rotation;
  * testing that directly on your deployment hardware.
  * <h3>Resource Overhead</h3>
  * The {@link ExecutorService} utilized by this class won't be initialized until
- * the class is referenced for the first time or explicitly set with one of the
- * setter methods. More specifically, if you have no need for asynchronous image
- * processing offered by this class, you don't need to worry about wasted
- * resources or hanging/idle threads as they will never be created if you never
- * reference this class.
+ * one of the operation methods are called, at which point the
+ * <code>service</code> will be instantiated for the first time and operation
+ * queued up.
+ * <p/>
+ * More specifically, if you have no need for asynchronous image processing
+ * offered by this class, you don't need to worry about wasted resources or
+ * hanging/idle threads as they will never be created if you never use this
+ * class.
+ * <h3>Cleaning up Service Threads</h3>
+ * By default the {@link Thread}s created by the internal
+ * {@link ThreadPoolExecutor} do not run in <code>daemon</code> mode; which
+ * means they will block the host VM from exiting until they are explicitly shut
+ * down.
+ * <p/>
+ * If you have used the {@link AsyncScalr} class and are trying to shut down a
+ * client application, you will need to call {@link #getService()} then
+ * {@link ExecutorService#shutdown()} or <code>shutdownNow()</code> to have the
+ * threads terminated.
+ * <p/>
+ * Alternatively if you are deploying imgscalr and using the async functionality
+ * in a client application and this seems like a pain, you can subclass this
+ * class and provide a {@link ExecutorService} that uses a {@link ThreadFactory}
+ * that creates {@link Thread}s who do run in <code>daemon</code> mode and they
+ * will shut themselves down immediately (killing any in-progress work) when the
+ * JVM exits.
+ * <h3>Custom ExecutorService Implementations</h3>
+ * By default this class uses a {@link ThreadPoolExecutor} to handle execution
+ * of queued image operations. If a different {@link ExecutorService}
+ * implementation is desired, this class can be easily subclasses and the
+ * internal {@link #verifyService()} method overridden with custom logic to
+ * verify (and if necessary) create a new executor that is assigned to the
+ * internal variable <code>service</code>.
  * 
  * @author Riyad Kalla (software@thebuzzmedia.com)
  * @since 3.2
  */
+@SuppressWarnings("javadoc")
 public class AsyncScalr {
 	/**
 	 * Number of threads the internal {@link ExecutorService} will use to
@@ -133,7 +160,7 @@ public class AsyncScalr {
 			"imgscalr.async.threadCount", 2);
 
 	/**
-	 * Initializer used to verify the system properties.
+	 * Initializer used to verify the THREAD_COUNT system property.
 	 */
 	static {
 		if (THREAD_COUNT <= 0)
@@ -168,6 +195,9 @@ public class AsyncScalr {
 		return service;
 	}
 
+	/**
+	 * @see Scalr#apply(BufferedImage, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> apply(final BufferedImage src,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
@@ -180,6 +210,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#crop(BufferedImage, int, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> crop(final BufferedImage src,
 			final int width, final int height, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
@@ -192,6 +225,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#crop(BufferedImage, int, int, int, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> crop(final BufferedImage src,
 			final int x, final int y, final int width, final int height,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
@@ -205,6 +241,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#pad(BufferedImage, int, Color, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> pad(final BufferedImage src,
 			final int padding, final Color color, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
@@ -217,6 +256,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final int targetSize, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
@@ -229,6 +271,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, Method, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final int targetSize,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
@@ -242,6 +287,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, Mode, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Mode resizeMode, final int targetSize,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
@@ -255,6 +303,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, Method, Mode, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final Mode resizeMode,
 			final int targetSize, final BufferedImageOp... ops)
@@ -269,6 +320,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, int, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final int targetWidth, final int targetHeight,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
@@ -282,6 +336,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, Method, int, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final int targetWidth,
 			final int targetHeight, final BufferedImageOp... ops) {
@@ -295,6 +352,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, Mode, int, int, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Mode resizeMode, final int targetWidth,
 			final int targetHeight, final BufferedImageOp... ops)
@@ -309,6 +369,10 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#resize(BufferedImage, Method, Mode, int, int,
+	 *      BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final Mode resizeMode,
 			final int targetWidth, final int targetHeight,
@@ -324,6 +388,9 @@ public class AsyncScalr {
 		});
 	}
 
+	/**
+	 * @see Scalr#rotate(BufferedImage, Rotation, BufferedImageOp...)
+	 */
 	public static Future<BufferedImage> rotate(final BufferedImage src,
 			final Rotation rotation, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
