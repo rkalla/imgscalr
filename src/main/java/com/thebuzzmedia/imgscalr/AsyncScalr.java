@@ -3,6 +3,7 @@ package com.thebuzzmedia.imgscalr;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
+import java.awt.image.ImagingOpException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -13,6 +14,8 @@ import java.util.concurrent.TimeUnit;
 import com.thebuzzmedia.imgscalr.Scalr.Method;
 import com.thebuzzmedia.imgscalr.Scalr.Mode;
 import com.thebuzzmedia.imgscalr.Scalr.Rotation;
+
+// TODO: update class javadoc
 
 /**
  * Class used to provide the asynchronous versions of all the methods defined in
@@ -166,7 +169,8 @@ public class AsyncScalr {
 	}
 
 	public static Future<BufferedImage> apply(final BufferedImage src,
-			final BufferedImageOp... ops) throws IllegalArgumentException {
+			final BufferedImageOp... ops) throws IllegalArgumentException,
+			ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -178,7 +182,7 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> crop(final BufferedImage src,
 			final int width, final int height, final BufferedImageOp... ops)
-			throws IllegalArgumentException {
+			throws IllegalArgumentException, ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -190,7 +194,8 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> crop(final BufferedImage src,
 			final int x, final int y, final int width, final int height,
-			final BufferedImageOp... ops) throws IllegalArgumentException {
+			final BufferedImageOp... ops) throws IllegalArgumentException,
+			ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -202,7 +207,7 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> pad(final BufferedImage src,
 			final int padding, final Color color, final BufferedImageOp... ops)
-			throws IllegalArgumentException {
+			throws IllegalArgumentException, ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -214,7 +219,7 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final int targetSize, final BufferedImageOp... ops)
-			throws IllegalArgumentException {
+			throws IllegalArgumentException, ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -226,7 +231,8 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final int targetSize,
-			final BufferedImageOp... ops) throws IllegalArgumentException {
+			final BufferedImageOp... ops) throws IllegalArgumentException,
+			ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -238,7 +244,8 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Mode resizeMode, final int targetSize,
-			final BufferedImageOp... ops) throws IllegalArgumentException {
+			final BufferedImageOp... ops) throws IllegalArgumentException,
+			ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -251,7 +258,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final Mode resizeMode,
 			final int targetSize, final BufferedImageOp... ops)
-			throws IllegalArgumentException {
+			throws IllegalArgumentException, ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -264,7 +271,8 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final int targetWidth, final int targetHeight,
-			final BufferedImageOp... ops) throws IllegalArgumentException {
+			final BufferedImageOp... ops) throws IllegalArgumentException,
+			ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -290,7 +298,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Mode resizeMode, final int targetWidth,
 			final int targetHeight, final BufferedImageOp... ops)
-			throws IllegalArgumentException {
+			throws IllegalArgumentException, ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -304,7 +312,8 @@ public class AsyncScalr {
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final Mode resizeMode,
 			final int targetWidth, final int targetHeight,
-			final BufferedImageOp... ops) throws IllegalArgumentException {
+			final BufferedImageOp... ops) throws IllegalArgumentException,
+			ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
@@ -317,7 +326,7 @@ public class AsyncScalr {
 
 	public static Future<BufferedImage> rotate(final BufferedImage src,
 			final Rotation rotation, final BufferedImageOp... ops)
-			throws IllegalArgumentException {
+			throws IllegalArgumentException, ImagingOpException {
 		verifyService();
 
 		return service.submit(new Callable<BufferedImage>() {
