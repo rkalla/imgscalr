@@ -8,30 +8,41 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
 import java.awt.image.ImagingOpException;
+import java.util.Arrays;
+import java.util.List;
 
 public class ApplyOp implements IOp {
-	protected BufferedImageOp[] ops;
+	protected List<BufferedImageOp> opList;
 
 	public ApplyOp(BufferedImageOp... ops) throws IllegalArgumentException {
 		if (ops == null || ops.length == 0)
 			throw new IllegalArgumentException("ops cannot be null or empty");
 
-		this.ops = ops;
+		opList = Arrays.asList(ops);
+	}
+
+	public ApplyOp(List<BufferedImageOp> opList)
+			throws IllegalArgumentException {
+		if (opList == null || opList.isEmpty())
+			throw new IllegalArgumentException("opList cannot be null or empty");
+
+		this.opList = opList;
 	}
 
 	@Override
 	public String toString() {
+		int size = opList.size();
 		StringBuilder buffer = new StringBuilder();
 
 		buffer.append(getClass().getName());
 		buffer.append('@');
 		buffer.append(hashCode());
-		buffer.append(" [length=").append(ops.length).append(", ops={");
+		buffer.append(" [length=").append(size).append(", ops={");
 
-		for (int i = 0; i < ops.length; i++) {
-			buffer.append(ops[i]);
+		for (int i = 0; i < size; i++) {
+			buffer.append(opList.get(i));
 
-			if (i < (ops.length - 1))
+			if (i < (size - 1))
 				buffer.append(',');
 		}
 
@@ -71,15 +82,16 @@ public class ApplyOp implements IOp {
 		if (!isOptimalImage(src))
 			src = copyToOptimalImage(src);
 
+		int size = opList.size();
 		BufferedImage result = null;
 		boolean hasReassignedSrc = false;
 
 		if (DEBUG)
-			log(0, this, "Applying %d BufferedImageOps...", ops.length);
+			log(0, this, "Applying %d BufferedImageOps...", size);
 
-		for (int i = 0; i < ops.length; i++) {
+		for (int i = 0; i < size; i++) {
 			long subT = System.currentTimeMillis();
-			BufferedImageOp op = ops[i];
+			BufferedImageOp op = opList.get(i);
 
 			// Skip null ops instead of throwing an exception.
 			if (op == null)
@@ -152,8 +164,8 @@ public class ApplyOp implements IOp {
 		}
 
 		if (DEBUG)
-			log(0, this, "All %d BufferedImageOps applied in %d ms",
-					ops.length, System.currentTimeMillis() - t);
+			log(0, this, "All %d BufferedImageOps applied in %d ms", size,
+					System.currentTimeMillis() - t);
 
 		return result;
 	}
