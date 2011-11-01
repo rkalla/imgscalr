@@ -9,6 +9,23 @@ import org.imgscalr.Scalr.Method;
 import org.imgscalr.Scalr.Mode;
 import org.imgscalr.Scalr.Rotation;
 
+/*
+ * TODO: The Builder pattern dictates that the constructor accepts all required
+ * params, and all the extra build methods are all optional.
+ * 
+ * In that case, the builder should accept:
+ * 1. the image that is to be operated on
+ * 2. boolean flag used to indicate if the ops should be done Sync or Async -- I
+ * don't like this because it hides the fact that this builder is using a concrete
+ * class from a super package.
+ * 
+ *  NOTE: adding a "BufferedImage build()" method that executes all the pending
+ *  operations, and keeps the overloaded "apply" method out of Scalr is nice,
+ *  but I don't like that this will hide the impl details of HOW it is done
+ *  inside the builder.
+ *  
+ *  Unless that is normally OK? Need to mull longer.
+ */
 public class OpBuilder {
 	protected List<IOp> opList;
 
