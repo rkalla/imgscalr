@@ -30,8 +30,7 @@ public class OpBuilder {
 
 	public OpBuilder crop(int width, int height)
 			throws IllegalArgumentException {
-		opList.add(new CropOp(width, height));
-		return this;
+		return crop(0, 0, width, height);
 	}
 
 	public OpBuilder crop(int x, int y, int width, int height)
@@ -41,8 +40,7 @@ public class OpBuilder {
 	}
 
 	public OpBuilder pad(int padding) throws IllegalArgumentException {
-		opList.add(new PadOp(padding));
-		return this;
+		return pad(padding, Color.BLACK);
 	}
 
 	public OpBuilder pad(int padding, Color color)
@@ -52,44 +50,38 @@ public class OpBuilder {
 	}
 
 	public OpBuilder resize(int targetSize) throws IllegalArgumentException {
-		opList.add(new ResizeOp(targetSize));
-		return this;
+		return resize(Method.AUTOMATIC, Mode.AUTOMATIC, targetSize, targetSize);
 	}
 
 	public OpBuilder resize(Method method, int targetSize)
 			throws IllegalArgumentException {
-		opList.add(new ResizeOp(method, targetSize));
-		return this;
+		return resize(method, Mode.AUTOMATIC, targetSize, targetSize);
 	}
 
 	public OpBuilder resize(Mode mode, int targetSize)
 			throws IllegalArgumentException {
-		opList.add(new ResizeOp(mode, targetSize));
-		return this;
+		return resize(Method.AUTOMATIC, mode, targetSize, targetSize);
 	}
 
 	public OpBuilder resize(Method method, Mode mode, int targetSize)
 			throws IllegalArgumentException {
-		opList.add(new ResizeOp(method, mode, targetSize));
-		return this;
+		return resize(method, mode, targetSize, targetSize);
 	}
 
 	public OpBuilder resize(int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		opList.add(new ResizeOp(targetWidth, targetHeight));
-		return this;
+		return resize(Method.AUTOMATIC, Mode.AUTOMATIC, targetWidth,
+				targetHeight);
 	}
 
 	public OpBuilder resize(Method method, int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		opList.add(new ResizeOp(method, targetWidth, targetHeight));
-		return this;
+		return resize(method, Mode.AUTOMATIC, targetWidth, targetHeight);
 	}
 
 	public OpBuilder resize(Mode mode, int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		opList.add(new ResizeOp(mode, targetWidth, targetHeight));
-		return this;
+		return resize(Method.AUTOMATIC, mode, targetWidth, targetHeight);
 	}
 
 	public OpBuilder resize(Method method, Mode mode, int targetWidth,

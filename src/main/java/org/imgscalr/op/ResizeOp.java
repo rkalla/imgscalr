@@ -20,40 +20,6 @@ public class ResizeOp implements IOp {
 	protected int targetWidth;
 	protected int targetHeight;
 
-	public ResizeOp(int targetSize) throws IllegalArgumentException {
-		this(Method.AUTOMATIC, Mode.AUTOMATIC, targetSize, targetSize);
-	}
-
-	public ResizeOp(Method scalingMethod, int targetSize)
-			throws IllegalArgumentException {
-		this(scalingMethod, Mode.AUTOMATIC, targetSize, targetSize);
-	}
-
-	public ResizeOp(Mode resizeMode, int targetSize)
-			throws IllegalArgumentException {
-		this(Method.AUTOMATIC, resizeMode, targetSize, targetSize);
-	}
-
-	public ResizeOp(Method scalingMethod, Mode resizeMode, int targetSize)
-			throws IllegalArgumentException {
-		this(scalingMethod, resizeMode, targetSize, targetSize);
-	}
-
-	public ResizeOp(int targetWidth, int targetHeight)
-			throws IllegalArgumentException {
-		this(Method.AUTOMATIC, Mode.AUTOMATIC, targetWidth, targetHeight);
-	}
-
-	public ResizeOp(Method scalingMethod, int targetWidth, int targetHeight)
-			throws IllegalArgumentException {
-		this(scalingMethod, Mode.AUTOMATIC, targetWidth, targetHeight);
-	}
-
-	public ResizeOp(Mode resizeMode, int targetWidth, int targetHeight)
-			throws IllegalArgumentException {
-		this(Method.AUTOMATIC, resizeMode, targetWidth, targetHeight);
-	}
-
 	public ResizeOp(Method scalingMethod, Mode resizeMode, int targetWidth,
 			int targetHeight) throws IllegalArgumentException {
 		if (targetWidth < 0)

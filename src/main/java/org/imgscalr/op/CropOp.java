@@ -14,10 +14,6 @@ public class CropOp implements IOp {
 	protected int width;
 	protected int height;
 
-	public CropOp(int width, int height) throws IllegalArgumentException {
-		this(0, 0, width, height);
-	}
-
 	public CropOp(int x, int y, int width, int height)
 			throws IllegalArgumentException {
 		if (x < 0 || y < 0 || width < 0 || height < 0)

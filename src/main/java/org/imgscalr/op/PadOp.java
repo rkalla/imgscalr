@@ -12,10 +12,6 @@ public class PadOp implements IOp {
 	protected int padding;
 	protected Color color;
 
-	public PadOp(int padding) throws IllegalArgumentException {
-		this(padding, Color.BLACK);
-	}
-
 	public PadOp(int padding, Color color) throws IllegalArgumentException {
 		if (padding <= 0)
 			throw new IllegalArgumentException("padding [" + padding
