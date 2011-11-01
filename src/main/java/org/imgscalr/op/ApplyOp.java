@@ -9,7 +9,7 @@ import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
 import java.awt.image.ImagingOpException;
 
-public class ApplyOp extends AbstractOp {
+public class ApplyOp implements IOp {
 	protected BufferedImageOp[] ops;
 
 	public ApplyOp(BufferedImageOp... ops) throws IllegalArgumentException {
