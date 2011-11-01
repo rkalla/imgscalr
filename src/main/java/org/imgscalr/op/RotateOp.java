@@ -22,6 +22,12 @@ public class RotateOp implements IOp {
 	}
 
 	@Override
+	public String toString() {
+		return getClass().getName() + "@" + hashCode() + " [rotation="
+				+ rotation + "]";
+	}
+
+	@Override
 	public BufferedImage apply(BufferedImage src)
 			throws IllegalArgumentException, ImagingOpException {
 		long t = System.currentTimeMillis();

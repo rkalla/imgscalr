@@ -21,39 +21,39 @@ public class ResizeOp implements IOp {
 	protected int targetHeight;
 
 	public ResizeOp(int targetSize) throws IllegalArgumentException {
-		this(targetSize, targetSize, Method.AUTOMATIC, Mode.AUTOMATIC);
+		this(Method.AUTOMATIC, Mode.AUTOMATIC, targetSize, targetSize);
 	}
 
-	public ResizeOp(int targetSize, Method method)
+	public ResizeOp(Method method, int targetSize)
 			throws IllegalArgumentException {
-		this(targetSize, targetSize, method, Mode.AUTOMATIC);
+		this(method, Mode.AUTOMATIC, targetSize, targetSize);
 	}
 
-	public ResizeOp(int targetSize, Mode mode) throws IllegalArgumentException {
-		this(targetSize, targetSize, Method.AUTOMATIC, mode);
+	public ResizeOp(Mode mode, int targetSize) throws IllegalArgumentException {
+		this(Method.AUTOMATIC, mode, targetSize, targetSize);
 	}
 
-	public ResizeOp(int targetSize, Method method, Mode mode)
+	public ResizeOp(Method method, Mode mode, int targetSize)
 			throws IllegalArgumentException {
-		this(targetSize, targetSize, method, mode);
+		this(method, mode, targetSize, targetSize);
 	}
 
 	public ResizeOp(int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		this(targetWidth, targetHeight, Method.AUTOMATIC, Mode.AUTOMATIC);
+		this(Method.AUTOMATIC, Mode.AUTOMATIC, targetWidth, targetHeight);
 	}
 
-	public ResizeOp(int targetWidth, int targetHeight, Method method)
+	public ResizeOp(Method method, int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		this(targetWidth, targetHeight, method, Mode.AUTOMATIC);
+		this(method, Mode.AUTOMATIC, targetWidth, targetHeight);
 	}
 
-	public ResizeOp(int targetWidth, int targetHeight, Mode mode)
+	public ResizeOp(Mode mode, int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		this(targetWidth, targetHeight, Method.AUTOMATIC, mode);
+		this(Method.AUTOMATIC, mode, targetWidth, targetHeight);
 	}
 
-	public ResizeOp(int targetWidth, int targetHeight, Method method, Mode mode)
+	public ResizeOp(Method method, Mode mode, int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
 		if (targetWidth < 0)
 			throw new IllegalArgumentException("targetWidth must be >= 0");
@@ -70,6 +70,13 @@ public class ResizeOp implements IOp {
 		this.targetHeight = targetHeight;
 		this.method = method;
 		this.mode = mode;
+	}
+
+	@Override
+	public String toString() {
+		return getClass().getName() + "@" + hashCode() + " [method=" + method
+				+ ", mode=" + mode + ", targetWidth=" + targetWidth
+				+ ", targetHeight=" + targetHeight + "]";
 	}
 
 	@Override
