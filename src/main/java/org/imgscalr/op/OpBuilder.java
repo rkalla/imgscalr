@@ -28,6 +28,12 @@ public class OpBuilder {
 		return this;
 	}
 
+	public OpBuilder apply(List<BufferedImageOp> opList)
+			throws IllegalArgumentException {
+		this.opList.add(new ApplyOp(opList));
+		return this;
+	}
+
 	public OpBuilder crop(int width, int height)
 			throws IllegalArgumentException {
 		return crop(0, 0, width, height);

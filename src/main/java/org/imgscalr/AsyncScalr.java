@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
 import java.awt.image.ImagingOpException;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -209,6 +210,21 @@ public class AsyncScalr {
 	}
 
 	/**
+	 * @see Scalr#apply(BufferedImage, List)
+	 */
+	public static Future<BufferedImage> apply(final BufferedImage src,
+			final List<BufferedImageOp> opList)
+			throws IllegalArgumentException, ImagingOpException {
+		verifyService();
+
+		return service.submit(new Callable<BufferedImage>() {
+			public BufferedImage call() throws Exception {
+				return Scalr.apply(src, opList);
+			}
+		});
+	}
+
+	/**
 	 * @see Scalr#crop(BufferedImage, int, int, BufferedImageOp...)
 	 */
 	public static Future<BufferedImage> crop(final BufferedImage src,
@@ -235,6 +251,21 @@ public class AsyncScalr {
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
 				return Scalr.crop(src, x, y, width, height, ops);
+			}
+		});
+	}
+
+	/**
+	 * @see Scalr#pad(BufferedImage, int, BufferedImageOp...)
+	 */
+	public static Future<BufferedImage> pad(final BufferedImage src,
+			final int padding, final BufferedImageOp... ops)
+			throws IllegalArgumentException, ImagingOpException {
+		verifyService();
+
+		return service.submit(new Callable<BufferedImage>() {
+			public BufferedImage call() throws Exception {
+				return Scalr.pad(src, padding, ops);
 			}
 		});
 	}
