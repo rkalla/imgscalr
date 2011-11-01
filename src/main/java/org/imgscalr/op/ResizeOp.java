@@ -14,8 +14,8 @@ import org.imgscalr.Scalr.Method;
 import org.imgscalr.Scalr.Mode;
 
 public class ResizeOp implements IOp {
-	protected Mode mode;
-	protected Method method;
+	protected Mode resizeMode;
+	protected Method scalingMethod;
 
 	protected int targetWidth;
 	protected int targetHeight;
@@ -24,18 +24,19 @@ public class ResizeOp implements IOp {
 		this(Method.AUTOMATIC, Mode.AUTOMATIC, targetSize, targetSize);
 	}
 
-	public ResizeOp(Method method, int targetSize)
+	public ResizeOp(Method scalingMethod, int targetSize)
 			throws IllegalArgumentException {
-		this(method, Mode.AUTOMATIC, targetSize, targetSize);
+		this(scalingMethod, Mode.AUTOMATIC, targetSize, targetSize);
 	}
 
-	public ResizeOp(Mode mode, int targetSize) throws IllegalArgumentException {
-		this(Method.AUTOMATIC, mode, targetSize, targetSize);
+	public ResizeOp(Mode resizeMode, int targetSize)
+			throws IllegalArgumentException {
+		this(Method.AUTOMATIC, resizeMode, targetSize, targetSize);
 	}
 
-	public ResizeOp(Method method, Mode mode, int targetSize)
+	public ResizeOp(Method scalingMethod, Mode resizeMode, int targetSize)
 			throws IllegalArgumentException {
-		this(method, mode, targetSize, targetSize);
+		this(scalingMethod, resizeMode, targetSize, targetSize);
 	}
 
 	public ResizeOp(int targetWidth, int targetHeight)
@@ -43,40 +44,41 @@ public class ResizeOp implements IOp {
 		this(Method.AUTOMATIC, Mode.AUTOMATIC, targetWidth, targetHeight);
 	}
 
-	public ResizeOp(Method method, int targetWidth, int targetHeight)
+	public ResizeOp(Method scalingMethod, int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		this(method, Mode.AUTOMATIC, targetWidth, targetHeight);
+		this(scalingMethod, Mode.AUTOMATIC, targetWidth, targetHeight);
 	}
 
-	public ResizeOp(Mode mode, int targetWidth, int targetHeight)
+	public ResizeOp(Mode resizeMode, int targetWidth, int targetHeight)
 			throws IllegalArgumentException {
-		this(Method.AUTOMATIC, mode, targetWidth, targetHeight);
+		this(Method.AUTOMATIC, resizeMode, targetWidth, targetHeight);
 	}
 
-	public ResizeOp(Method method, Mode mode, int targetWidth, int targetHeight)
-			throws IllegalArgumentException {
+	public ResizeOp(Method scalingMethod, Mode resizeMode, int targetWidth,
+			int targetHeight) throws IllegalArgumentException {
 		if (targetWidth < 0)
 			throw new IllegalArgumentException("targetWidth must be >= 0");
 		if (targetHeight < 0)
 			throw new IllegalArgumentException("targetHeight must be >= 0");
-		if (method == null)
+		if (scalingMethod == null)
 			throw new IllegalArgumentException(
 					"scalingMethod cannot be null. A good default value is Method.AUTOMATIC.");
-		if (mode == null)
+		if (resizeMode == null)
 			throw new IllegalArgumentException(
 					"resizeMode cannot be null. A good default value is Mode.AUTOMATIC.");
 
 		this.targetWidth = targetWidth;
 		this.targetHeight = targetHeight;
-		this.method = method;
-		this.mode = mode;
+		this.scalingMethod = scalingMethod;
+		this.resizeMode = resizeMode;
 	}
 
 	@Override
 	public String toString() {
-		return getClass().getName() + "@" + hashCode() + " [method=" + method
-				+ ", mode=" + mode + ", targetWidth=" + targetWidth
-				+ ", targetHeight=" + targetHeight + "]";
+		return getClass().getName() + "@" + hashCode() + " [scalingMethod="
+				+ scalingMethod + ", resizeMode=" + resizeMode
+				+ ", targetWidth=" + targetWidth + ", targetHeight="
+				+ targetHeight + "]";
 	}
 
 	@Override
@@ -98,8 +100,8 @@ public class ResizeOp implements IOp {
 		if (DEBUG)
 			log(0,
 					this,
-					"Resizing Image [size=%dx%d, mode=%s, orientation=%s, ratio(H/W)=%f] to [targetSize=%dx%d]",
-					currentWidth, currentHeight, mode,
+					"Resizing Image [size=%dx%d, resizeMode=%s, orientation=%s, ratio(H/W)=%f] to [targetSize=%dx%d]",
+					currentWidth, currentHeight, resizeMode,
 					(ratio <= 1 ? "Landscape/Square" : "Portrait"), ratio,
 					targetWidth, targetHeight);
 
@@ -120,9 +122,9 @@ public class ResizeOp implements IOp {
 		 * just specify the dimensions they would like the image to roughly fit
 		 * within and it will do the right thing without mangling the result.
 		 */
-		if (mode != Mode.FIT_EXACT) {
-			if ((ratio <= 1 && mode == Mode.AUTOMATIC)
-					|| (mode == Mode.FIT_TO_WIDTH)) {
+		if (resizeMode != Mode.FIT_EXACT) {
+			if ((ratio <= 1 && resizeMode == Mode.AUTOMATIC)
+					|| (resizeMode == Mode.FIT_TO_WIDTH)) {
 				// First make sure we need to do any work in the first place
 				if (targetWidth == src.getWidth())
 					return src;
@@ -168,20 +170,21 @@ public class ResizeOp implements IOp {
 					"Resize Mode FIT_EXACT used, no width/height checking or re-calculation will be done.");
 
 		// If AUTOMATIC was specified, determine the real scaling method.
-		if (method == Scalr.Method.AUTOMATIC)
-			method = determineScalingMethod(targetWidth, targetHeight, ratio);
+		if (scalingMethod == Scalr.Method.AUTOMATIC)
+			scalingMethod = determineScalingMethod(targetWidth, targetHeight,
+					ratio);
 
 		if (DEBUG)
-			log(1, this, "Using Scaling Method: %s", method);
+			log(1, this, "Using Scaling Method: %s", scalingMethod);
 
 		// Now we scale the image
-		if (method == Scalr.Method.SPEED) {
+		if (scalingMethod == Scalr.Method.SPEED) {
 			result = scaleImage(src, targetWidth, targetHeight,
 					RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-		} else if (method == Scalr.Method.BALANCED) {
+		} else if (scalingMethod == Scalr.Method.BALANCED) {
 			result = scaleImage(src, targetWidth, targetHeight,
 					RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-		} else if (method == Scalr.Method.QUALITY) {
+		} else if (scalingMethod == Scalr.Method.QUALITY) {
 			/*
 			 * If we are scaling up (in either width or height - since we know
 			 * the image will stay proportional we just check if either are
@@ -201,9 +204,9 @@ public class ResizeOp implements IOp {
 				 * BILINEAR and BICUBIC look similar the smaller the scale jump
 				 * upwards is, if the scale is larger BICUBIC looks sharper and
 				 * less fuzzy. But most importantly we have to use BICUBIC to
-				 * match the contract of the QUALITY rendering method. This note
-				 * is just here for anyone reading the code and wondering how
-				 * they can speed their own calls up.
+				 * match the contract of the QUALITY rendering scalingMethod.
+				 * This note is just here for anyone reading the code and
+				 * wondering how they can speed their own calls up.
 				 */
 				result = scaleImage(src, targetWidth, targetHeight,
 						RenderingHints.VALUE_INTERPOLATION_BICUBIC);
@@ -270,7 +273,7 @@ public class ResizeOp implements IOp {
 		// Default to speed
 		Method result = Method.SPEED;
 
-		// Figure out which method should be used
+		// Figure out which scalingMethod should be used
 		if (length <= Scalr.THRESHOLD_QUALITY_BALANCED)
 			result = Method.QUALITY;
 		else if (length <= Scalr.THRESHOLD_BALANCED_SPEED)
