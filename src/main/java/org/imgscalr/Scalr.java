@@ -923,7 +923,7 @@ public class Scalr {
 			 * result of a scale operation), then this method below leaves the
 			 * source unchanged.
 			 */
-			src = adjustToOptimalImage(src);
+			src = copyToOptimalImage(src);
 
 			/*
 			 * We must manually create the target image; we cannot rely on the
@@ -1895,7 +1895,7 @@ public class Scalr {
 		if (DEBUG)
 			log("Scaled image in %d ms", System.currentTimeMillis() - t);
 
-		// Apply the image ops if any were provided
+		// Apply ops if we have any.
 		if (ops != null && ops.length > 0)
 			result = apply(result, ops);
 
@@ -2047,7 +2047,7 @@ public class Scalr {
 					System.currentTimeMillis() - t, result.getWidth(),
 					result.getHeight());
 
-		// Apply any optional operations.
+		// Apply ops if we have any.
 		if (ops != null && ops.length > 0)
 			result = apply(result, ops);
 
@@ -2203,10 +2203,13 @@ public class Scalr {
 
 	/**
 	 * Used to copy a {@link BufferedImage} from a non-optimal type into a new
-	 * {@link BufferedImage} instance of an optimal type if necessary.
+	 * {@link BufferedImage} instance of an optimal type. If <code>src</code> is
+	 * already of an optimal type, then it is simply returned unchanged.
 	 * <p/>
-	 * If <code>src</code> is already of an optimal type, then it is simply
-	 * returned unchanged.
+	 * This is used internally by methods (e.g. apply, pad, etc.) that need to
+	 * have an image in an optimally support type before trying to apply
+	 * mutation operations against it to avoid exceptions or total image
+	 * corruption from the Java2D rendering pipeline.
 	 * 
 	 * @param src
 	 *            The image to copy (if necessary) into an optimally typed
@@ -2219,7 +2222,7 @@ public class Scalr {
 	 * @see #createOptimalImage(BufferedImage)
 	 * @see #createOptimalImage(BufferedImage, int, int)
 	 */
-	protected static BufferedImage adjustToOptimalImage(BufferedImage src) {
+	protected static BufferedImage copyToOptimalImage(BufferedImage src) {
 		int type = src.getType();
 		BufferedImage result;
 

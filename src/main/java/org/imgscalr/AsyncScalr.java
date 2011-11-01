@@ -16,9 +16,6 @@ import org.imgscalr.Scalr.Method;
 import org.imgscalr.Scalr.Mode;
 import org.imgscalr.Scalr.Rotation;
 
-
-// TODO: update class javadoc
-
 /**
  * Class used to provide the asynchronous versions of all the methods defined in
  * {@link Scalr} for the purpose of efficiently handling large amounts of image
