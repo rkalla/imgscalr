@@ -37,6 +37,13 @@ import java.awt.image.RescaleOp;
 
 import javax.imageio.ImageIO;
 
+/*
+ * TODO: Consider adding apply(image, List<BufferedImageOp>) and 
+ * apply(image, List<IOp>)) methods in addition to the var-arg methods to make
+ * it easier for folks to execute their operations without converting from their
+ * preferred container type.
+ */
+
 /**
  * Class used to implement performant, good-quality and intelligent image
  * scaling and manipulation algorithms in native Java 2D.
@@ -197,12 +204,18 @@ import javax.imageio.ImageIO;
  */
 public class Scalr {
 	/**
-	 * Constant used to define the system property name used to setup the debug
-	 * boolean flag.
+	 * System property name used to define the debug boolean flag.
 	 * <p/>
 	 * Value is "<code>imgscalr.debug</code>".
 	 */
 	public static final String DEBUG_PROPERTY_NAME = "imgscalr.debug";
+
+	/**
+	 * System property name used to define a custom log prefix.
+	 * <p/>
+	 * Value is "<code>imgscalr.logPrefix</code>".
+	 */
+	public static final String LOG_PREFIX_PROPERTY_NAME = "imgscalr.logPrefix";
 
 	/**
 	 * Flag used to indicate if debugging output has been enabled by setting the
@@ -210,11 +223,12 @@ public class Scalr {
 	 * value will be <code>false</code> if the "<code>imgscalr.debug</code>"
 	 * system property is undefined or set to <code>false</code>.
 	 * <p/>
-	 * This system property can be set on startup with:<br/>
+	 * This property can be set on startup with:<br/>
 	 * <code>
 	 * -Dimgscalr.debug=true
-	 * </code> or by calling {@link System#setProperty(String, String)} before
-	 * this class is loaded.
+	 * </code> or by calling {@link System#setProperty(String, String)} to set a
+	 * new property value for {@link #DEBUG_PROPERTY_NAME} before this class is
+	 * loaded.
 	 * <p/>
 	 * Default value is <code>false</code>.
 	 */
@@ -225,9 +239,17 @@ public class Scalr {
 	 * prefix helps make it easier both visually and programmatically to scan
 	 * log files for messages produced by this library.
 	 * <p/>
-	 * The value is "<code>[imgscalr] </code>" (including the space).
+	 * This property can be set on startup with:<br/>
+	 * <code>
+	 * -Dimgscalr.logPrefix=&lt;YOUR PREFIX HERE&gt;
+	 * </code> or by calling {@link System#setProperty(String, String)} to set a
+	 * new property value for {@link #LOG_PREFIX_PROPERTY_NAME} before this
+	 * class is loaded.
+	 * <p/>
+	 * Default value is "<code>[imgscalr] </code>" (including the space).
 	 */
-	public static final String LOG_PREFIX = "[imgscalr] ";
+	public static final String LOG_PREFIX = System.getProperty(
+			LOG_PREFIX_PROPERTY_NAME, "[imgscalr] ");
 
 	/**
 	 * A {@link ConvolveOp} using a very light "blur" kernel that acts like an

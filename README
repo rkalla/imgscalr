@@ -10,6 +10,9 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 Changelog
 ---------
 4.0 (in progress...)
+	* [BREAKING] Package has changed from com.thebuzzmedia.imgscalr to 
+	org.imgscalr.
+	
 	* [BREAKING] Java 6 is now required for using imgscalr. 
 	
 	The reason for this is because imgscalr not includes specific types of 
@@ -28,18 +31,26 @@ Changelog
 	* [BREAKING] All resize(...) methods that accepted Rotation enums are 
 	removed.
 	
-	* Added apply() support for applying an arbitrary list of BufferedImageOps
-	SAFELY and efficiently working around all the bugs in the JDK pertaining
-	to BIOs.
-	
-	* Added rotate() support.
+	* [MAJOR] All operations are now encapsulated inside of IOp implementations
+	in the "op" sub package. Scalr and AsyncScalr can still be used to execute
+	individual operations quickly, but to execute multiple operations in quick
+	succession you can pass a list of Ops to Scalr or AsyncScalr to run for you
+	or use OpBuilder to use the builder pattern to easily create a chain of
+	operations to create and execute against an image.
 	
 	* Added crop() support.
 	
 	* Added pad() support.
 	
-	* Support for rotate/crop/pad were all added to AsyncScalr so these operations
-	can all be asynchronously performed as well.
+	* Added op() support for applying an arbitrary list of BufferedImageOps
+	SAFELY and efficiently working around all the bugs in the JDK pertaining
+	to BufferedImageOps (also used internally when applying any optionally 
+	specified ops).
+	
+	* Added rotate() support.
+	
+	* Support for crop, op, pad and rotate were all added to AsyncScalr so these 
+	operations can all be asynchronously performed as well.
 	
 	* Added support for horizontal and vertical flipping of the image via the
 	Rotation enum and new rotate() method.
@@ -73,9 +84,45 @@ Changelog
 	concatenation. Should be significant run-time savings over time if you are
 	running in an environment with debugging turned on.
 	
-	* Added CLI support to imgscalr. You can now run the imgscalr-lib JAR from
-	the command line via 'java -jar imgscalr-lib-4.0.jar ...' with any number
-	of arguments to process images from scripts or other non-Java languages.
+	* Removed the identity-return functionality in each method to throw an 
+	exception instead of silently returning "src" unchanged.
+	
+	This was done intentionally to avoid users getting caught in the situation
+	where they have code that automatically calls flush() on "src" after an
+	imgscalr method has returned (assuming they NOW have a modified copy to work
+	with). 
+	
+	In the case of sending in invalid or null arguments, previously imgscalr
+	would return "src" unchanged, which means the caller would be calling
+	flush() on a perfectly good image they still needed and not a copy as was
+	assumed by using imgscalr (And there would be no way to tell if imgscalr had
+	created a copy or not without using an == check with EVERY returned image
+	result).
+	
+	Instead, invalid or missing arguments passed to any imgscalr method are
+	now considered an exception so the caller knows IMMEDIATELY when something
+	is wrong and won't get magically different/unexpected behavior.
+	
+	* Exposed the potential for every method to fire an ImagingOpException if
+	one of the BufferedImageOps fails to apply using the hardware-accelerated
+	underlying Java2D code path. These exceptions were previously hidden in the
+	guts of Java2D and could bubble up unexpectedly, now they are clearly defined
+	directly on the imgscalr API so they can be cause and handled IF the caller
+	wants or needs to do that when using custom BufferedImageOps.
+	
+	* Detailed notations about performance optimizations the caller can make to
+	ensure their handling of images are as performant as possible were added to
+	all the methods as a convenience.
+	
+	* Defined DEBUG system property name as a public constant that can be used
+	to help avoid misspellings when trying to set debugging on.
+	
+	* Modified LOG_PREFIX so it can now be set via the "imgscalr.logPrefix" 
+	system property value now.
+	
+	* Rewrote Javadoc covering a lot of the return and exception conditions for
+	all the methods to more clearly communicate what is happening inside the
+	method and to the original images.
 	
 	* [TIP] Because image operations have been made discrete operations
 	(e.g. flip, rotate, crop, etc.) imgscalr cannot automatically .flush() the
