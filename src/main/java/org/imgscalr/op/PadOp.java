@@ -69,13 +69,17 @@ public class PadOp implements IOp {
 
 		// Type of result image must contain alpha if either inputs had it.
 		if (colorHasAlpha || imageHasAlpha) {
-			log(1, this,
-					"Transparency FOUND in source image or color, using ARGB image type...");
+			if (DEBUG)
+				log(1, this,
+						"Transparency FOUND in source image or color, using ARGB image type...");
+
 			result = new BufferedImage(newWidth, newHeight,
 					BufferedImage.TYPE_INT_ARGB);
 		} else {
-			log(1, this,
-					"Transparency NOT FOUND in source image or color, using RGB image type...");
+			if (DEBUG)
+				log(1, this,
+						"Transparency NOT FOUND in source image or color, using RGB image type...");
+
 			result = new BufferedImage(newWidth, newHeight,
 					BufferedImage.TYPE_INT_RGB);
 		}
@@ -90,7 +94,9 @@ public class PadOp implements IOp {
 		g.drawImage(src, padding, padding, null);
 		g.dispose();
 
-		log(0, this, "Padding Applied in %d ms", System.currentTimeMillis() - t);
+		if (DEBUG)
+			log(0, this, "Padding Applied in %d ms", System.currentTimeMillis()
+					- t);
 
 		return result;
 	}

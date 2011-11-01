@@ -74,7 +74,8 @@ public class ApplyOp extends AbstractOp {
 		BufferedImage result = null;
 		boolean hasReassignedSrc = false;
 
-		log(0, this, "Applying %d BufferedImageOps...", ops.length);
+		if (DEBUG)
+			log(0, this, "Applying %d BufferedImageOps...", ops.length);
 
 		for (int i = 0; i < ops.length; i++) {
 			long subT = System.currentTimeMillis();
