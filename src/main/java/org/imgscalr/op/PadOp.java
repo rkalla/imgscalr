@@ -9,13 +9,11 @@ import java.awt.image.BufferedImage;
 import java.awt.image.ImagingOpException;
 
 public class PadOp implements IOp {
-	public static final Color DEFAULT_COLOR = Color.BLACK;
-
 	protected int padding;
 	protected Color color;
 
 	public PadOp(int padding) throws IllegalArgumentException {
-		this(padding, DEFAULT_COLOR);
+		this(padding, Color.BLACK);
 	}
 
 	public PadOp(int padding, Color color) throws IllegalArgumentException {
