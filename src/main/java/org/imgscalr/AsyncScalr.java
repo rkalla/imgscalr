@@ -11,6 +11,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.imgscalr.Scalr.Method;
 import org.imgscalr.Scalr.Mode;
@@ -19,7 +20,7 @@ import org.imgscalr.Scalr.Rotation;
 /**
  * Class used to provide the asynchronous versions of all the methods defined in
  * {@link Scalr} for the purpose of efficiently handling large amounts of image
- * operations via a select number of processing threads.
+ * operations via a select number of processing threads asynchronously.
  * <p/>
  * Given that image-scaling operations, especially when working with large
  * images, can be very hardware-intensive (both CPU and memory), in large-scale
@@ -35,14 +36,15 @@ import org.imgscalr.Scalr.Rotation;
  * that it should be integrated directly into the imgscalr library for everyone
  * to benefit from.
  * <p/>
- * Every method in this class wraps the mirrored calls in the {@link Scalr}
+ * Every method in this class wraps the matching methods in the {@link Scalr}
  * class in new {@link Callable} instances that are submitted to an internal
  * {@link ExecutorService} for execution at a later date. A {@link Future} is
- * returned to the caller representing the task that will perform the scale
- * operation. {@link Future#get()} or {@link Future#get(long, TimeUnit)} can be
- * used to block on the returned <code>Future</code>, waiting for the scale
- * operation to complete and return the resultant {@link BufferedImage} to the
- * caller.
+ * returned to the caller representing the task that is either currently
+ * performing the scale operation or will at a future date depending on where it
+ * is in the {@link ExecutorService}'s queue. {@link Future#get()} or
+ * {@link Future#get(long, TimeUnit)} can be used to block on the
+ * <code>Future</code>, waiting for the scale operation to complete and return
+ * the resultant {@link BufferedImage} to the caller.
  * <p/>
  * This design provides the following features:
  * <ul>
@@ -50,8 +52,9 @@ import org.imgscalr.Scalr.Rotation;
  * while waiting on the scaled result.</li>
  * <li>Serialize all scale requests down into a maximum number of
  * <em>simultaneous</em> scale operations with no additional/complex logic. The
- * number of simultaneous scale operations is caller-configurable so as best to
- * optimize the host system (e.g. 1 scale thread per core).</li>
+ * number of simultaneous scale operations is caller-configurable (see
+ * {@link #THREAD_COUNT}) so as best to optimize the host system (e.g. 1 scale
+ * thread per core).</li>
  * <li>No need to worry about overloading the host system with too many scale
  * operations, they will simply queue up in this class and execute in-order.</li>
  * <li>Synchronous/blocking behavior can still be achieved (if desired) by
@@ -118,32 +121,54 @@ import org.imgscalr.Scalr.Rotation;
  * By default the {@link Thread}s created by the internal
  * {@link ThreadPoolExecutor} do not run in <code>daemon</code> mode; which
  * means they will block the host VM from exiting until they are explicitly shut
- * down.
+ * down in a client application; in a server application the container will shut
+ * down the pool forcibly.
  * <p/>
  * If you have used the {@link AsyncScalr} class and are trying to shut down a
  * client application, you will need to call {@link #getService()} then
- * {@link ExecutorService#shutdown()} or <code>shutdownNow()</code> to have the
- * threads terminated.
+ * {@link ExecutorService#shutdown()} or {@link ExecutorService#shutdownNow()}
+ * to have the threads terminated; you may also want to look at the
+ * {@link ExecutorService#awaitTermination(long, TimeUnit)} method if you'd like
+ * to more closely monitor the shutting down process (and finalization of
+ * pending scale operations).
+ * <h3>Reusing Shutdown AsyncScalr</h3>
+ * If you have previously called <code>shutdown</code> on the underlying service
+ * utilized by this class, subsequent calls to any of the operations this class
+ * provides will invoke the internal {@link #checkService()} method which will
+ * replace the terminated underlying {@link ExecutorService} with a new one via
+ * the {@link #createService()} method.
+ * <h3>Custom Implementations</h3>
+ * If a subclass wants to customize the {@link ExecutorService} or
+ * {@link ThreadFactory} used under the covers, this can be done by overriding
+ * the {@link #createService()} method which is invoked by this class anytime a
+ * new {@link ExecutorService} is needed.
  * <p/>
- * Alternatively if you are deploying imgscalr and using the async functionality
- * in a client application and this seems like a pain, you can subclass this
- * class and provide a {@link ExecutorService} that uses a {@link ThreadFactory}
- * that creates {@link Thread}s who do run in <code>daemon</code> mode and they
- * will shut themselves down immediately (killing any in-progress work) when the
- * JVM exits.
- * <h3>Custom ExecutorService Implementations</h3>
- * By default this class uses a {@link ThreadPoolExecutor} to handle execution
- * of queued image operations. If a different {@link ExecutorService}
- * implementation is desired, this class can be easily subclasses and the
- * internal {@link #verifyService()} method overridden with custom logic to
- * verify (and if necessary) create a new executor that is assigned to the
- * internal variable <code>service</code>.
+ * By default the {@link #createService()} method delegates to the
+ * {@link #createService(ThreadFactory)} method with a new instance of
+ * {@link DefaultThreadFactory}. Either of these methods can be overridden and
+ * customized easily if desired.
+ * <p/>
+ * <strong>TIP</strong>: A common customization to this class is to make the
+ * {@link Thread}s generated by the underlying factory more server-friendly, in
+ * which case the caller would want to use an instance of the
+ * {@link ServerThreadFactory} when creating the new {@link ExecutorService}.
+ * <p/>
+ * This can be done in one line by overriding {@link #createService()} and
+ * returning the result of:
+ * <code>return createService(new ServerThreadFactory());</code>
+ * <p/>
+ * By default this class uses an {@link ThreadPoolExecutor} internally to handle
+ * execution of queued image operations. If a different type of
+ * {@link ExecutorService} is desired, again, simply overriding the
+ * {@link #createService()} method of choice is the right way to do that.
  * 
  * @author Riyad Kalla (software@thebuzzmedia.com)
  * @since 3.2
  */
 @SuppressWarnings("javadoc")
 public class AsyncScalr {
+	public static final String THREAD_COUNT_PROPERTY_NAME = "imgscalr.async.threadCount";
+
 	/**
 	 * Number of threads the internal {@link ExecutorService} will use to
 	 * simultaneously execute scale requests.
@@ -155,16 +180,16 @@ public class AsyncScalr {
 	 * Default value is <code>2</code>.
 	 */
 	public static final int THREAD_COUNT = Integer.getInteger(
-			"imgscalr.async.threadCount", 2);
+			THREAD_COUNT_PROPERTY_NAME, 2);
 
 	/**
 	 * Initializer used to verify the THREAD_COUNT system property.
 	 */
 	static {
-		if (THREAD_COUNT <= 0)
-			throw new RuntimeException(
-					"System property 'imgscalr.async.threadCount' set THREAD_COUNT to "
-							+ THREAD_COUNT + ", but THREAD_COUNT must be > 0.");
+		if (THREAD_COUNT < 1)
+			throw new RuntimeException("System property '"
+					+ THREAD_COUNT_PROPERTY_NAME + "' set THREAD_COUNT to "
+					+ THREAD_COUNT + ", but THREAD_COUNT must be > 0.");
 	}
 
 	protected static ExecutorService service;
@@ -199,7 +224,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> apply(final BufferedImage src,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -214,7 +239,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> crop(final BufferedImage src,
 			final int width, final int height, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -230,7 +255,7 @@ public class AsyncScalr {
 			final int x, final int y, final int width, final int height,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -245,7 +270,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> pad(final BufferedImage src,
 			final int padding, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -260,7 +285,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> pad(final BufferedImage src,
 			final int padding, final Color color, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -275,7 +300,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final int targetSize, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -291,7 +316,7 @@ public class AsyncScalr {
 			final Method scalingMethod, final int targetSize,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -307,7 +332,7 @@ public class AsyncScalr {
 			final Mode resizeMode, final int targetSize,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -323,7 +348,7 @@ public class AsyncScalr {
 			final Method scalingMethod, final Mode resizeMode,
 			final int targetSize, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -340,7 +365,7 @@ public class AsyncScalr {
 			final int targetWidth, final int targetHeight,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -355,7 +380,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> resize(final BufferedImage src,
 			final Method scalingMethod, final int targetWidth,
 			final int targetHeight, final BufferedImageOp... ops) {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -372,7 +397,7 @@ public class AsyncScalr {
 			final Mode resizeMode, final int targetWidth,
 			final int targetHeight, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -391,7 +416,7 @@ public class AsyncScalr {
 			final int targetWidth, final int targetHeight,
 			final BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -407,7 +432,7 @@ public class AsyncScalr {
 	public static Future<BufferedImage> rotate(final BufferedImage src,
 			final Rotation rotation, final BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		verifyService();
+		checkService();
 
 		return service.submit(new Callable<BufferedImage>() {
 			public BufferedImage call() throws Exception {
@@ -416,28 +441,132 @@ public class AsyncScalr {
 		});
 	}
 
+	protected static ExecutorService createService() {
+		return createService(new DefaultThreadFactory());
+	}
+
+	protected static ExecutorService createService(ThreadFactory factory)
+			throws IllegalArgumentException {
+		if (factory == null)
+			throw new IllegalArgumentException("factory cannot be null");
+
+		return Executors.newFixedThreadPool(THREAD_COUNT, factory);
+	}
+
 	/**
 	 * Used to verify that the underlying <code>service</code> points at an
 	 * active {@link ExecutorService} instance that can be used by this class.
 	 * <p/>
 	 * If <code>service</code> is <code>null</code>, has been shutdown or
 	 * terminated then this method will replace it with a new
-	 * {@link ThreadPoolExecutor} (using {@link #THREAD_COUNT} threads) by
-	 * assigning a new value to the <code>service</code> member variable.
+	 * {@link ExecutorService} by calling the {@link #createService()} method
+	 * and assigning the returned value to <code>service</code>.
 	 * <p/>
-	 * Custom implementations need to assign a new {@link ExecutorService}
-	 * instance to <code>service</code>, but it doesn't necessarily need to be
-	 * an instance of {@link ThreadPoolExecutor}; they are free to use the
-	 * executor of choice.
+	 * Any subclass that wants to customize the {@link ExecutorService} or
+	 * {@link ThreadFactory} used internally by this class should override the
+	 * {@link #createService()}.
 	 */
-	protected static void verifyService() {
+	protected static void checkService() {
 		if (service == null || service.isShutdown() || service.isTerminated()) {
 			/*
-			 * Assigning a new value will free the previous reference to service
-			 * if it was non-null, allowing it to be GC'ed when it is done
-			 * shutting down (assuming it hadn't already).
+			 * If service was shutdown or terminated, assigning a new value will
+			 * free the reference to the instance, allowing it to be GC'ed when
+			 * it is done shutting down (assuming it hadn't already).
 			 */
-			service = Executors.newFixedThreadPool(THREAD_COUNT);
+			service = createService();
+		}
+	}
+
+	/**
+	 * Default {@link ThreadFactory} used by the internal
+	 * {@link ExecutorService} to creates execution {@link Thread}s for image
+	 * scaling.
+	 * <p/>
+	 * More or less a copy of the hidden class backing the
+	 * {@link Executors#defaultThreadFactory()} method, but exposed here to make
+	 * it easier for implementors to extend and customize.
+	 * 
+	 * @author Doug Lea
+	 * @author Riyad Kalla (software@thebuzzmedia.com)
+	 * @since 4.0
+	 */
+	protected static class DefaultThreadFactory implements ThreadFactory {
+		protected static final AtomicInteger poolNumber = new AtomicInteger(1);
+
+		protected final ThreadGroup group;
+		protected final AtomicInteger threadNumber = new AtomicInteger(1);
+		protected final String namePrefix;
+
+		DefaultThreadFactory() {
+			SecurityManager manager = System.getSecurityManager();
+
+			/*
+			 * Determine the group that threads created by this factory will be
+			 * in.
+			 */
+			group = (manager == null ? Thread.currentThread().getThreadGroup()
+					: manager.getThreadGroup());
+
+			/*
+			 * Define a common name prefix for the threads created by this
+			 * factory.
+			 */
+			namePrefix = "pool-" + poolNumber.getAndIncrement() + "-thread-";
+		}
+
+		/**
+		 * Used to create a {@link Thread} capable of executing the given
+		 * {@link Runnable}.
+		 * <p/>
+		 * Thread created by this factory are utilized by the parent
+		 * {@link ExecutorService} when processing queued up scale operations.
+		 */
+		public Thread newThread(Runnable r) {
+			/*
+			 * Create a new thread in our specified group with a meaningful
+			 * thread name so it is easy to identify.
+			 */
+			Thread thread = new Thread(group, r, namePrefix
+					+ threadNumber.getAndIncrement(), 0);
+
+			// Configure thread according to class or subclass
+			thread.setDaemon(false);
+			thread.setPriority(Thread.NORM_PRIORITY);
+
+			return thread;
+		}
+	}
+
+	/**
+	 * An extension of the {@link DefaultThreadFactory} class that makes two
+	 * changes to the execution {@link Thread}s it generations:
+	 * <ol>
+	 * <li>Threads are set to be daemon threads instead of user threads.</li>
+	 * <li>Threads execute with a priority of {@link Thread#MIN_PRIORITY} to
+	 * make them more compatible with server environment deployments.</li>
+	 * </ol>
+	 * This class is provided as a convenience for subclasses to use if they
+	 * want this (common) customization to the {@link Thread}s used internally
+	 * by {@link AsyncScalr} to process images, but don't want to have to write
+	 * the implementation.
+	 * 
+	 * @author Riyad Kalla (software@thebuzzmedia.com)
+	 * @since 4.0
+	 */
+	protected static class ServerThreadFactory extends DefaultThreadFactory {
+		/**
+		 * Overridden to set <code>daemon</code> property to <code>true</code>
+		 * and decrease the priority of the new thread to
+		 * {@link Thread#MIN_PRIORITY} before returning it.
+		 */
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread thread = super.newThread(r);
+
+			thread.setDaemon(true);
+			thread.setPriority(Thread.MIN_PRIORITY);
+
+			return thread;
 		}
 	}
 }
