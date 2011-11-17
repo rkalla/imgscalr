@@ -1707,7 +1707,7 @@ public class Scalr {
 		if (ops != null && ops.length > 0)
 			result = apply(result, ops);
 
-		return src;
+		return result;
 	}
 
 	/**
