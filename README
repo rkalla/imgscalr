@@ -9,7 +9,7 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
-4.0 (in progress...)
+4.0
 	* [BREAKING] Package has changed from com.thebuzzmedia.imgscalr to 
 	org.imgscalr - I am sorry for the inconvenience of this, but this is
 	necessary. There will be a family of imgscalr-based Java utilities coming
@@ -139,6 +139,12 @@ Changelog
 	
 	* Modified LOG_PREFIX so it can now be set via the "imgscalr.logPrefix" 
 	system property value now.
+	
+	* Rewrote imgscalr test suite to specifically test all discrete operations
+	and all variations of the operations as well.
+	
+	* Added AllTests test suite so all tests can be easily run at one time to
+	verify the release.
 	
 	* Rewrote Javadoc covering a lot of the return and exception conditions for
 	all the methods to more clearly communicate what is happening inside the
