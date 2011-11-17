@@ -539,7 +539,7 @@ public class Scalr {
 	 * Used to apply, in the order given, 1 or more {@link BufferedImageOp}s to
 	 * a given {@link BufferedImage} and return the result.
 	 * <p/>
-	 * <strong>Feature</code>: This implementation works around <a
+	 * <strong>Feature</strong>: This implementation works around <a
 	 * href="http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4965606">a
 	 * decade-old JDK bug</a> that can cause a {@link RasterFormatException}
 	 * when applying a perfectly valid {@link BufferedImageOp}s to images.

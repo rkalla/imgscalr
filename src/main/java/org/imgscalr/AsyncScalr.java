@@ -167,6 +167,13 @@ import org.imgscalr.Scalr.Rotation;
  */
 @SuppressWarnings("javadoc")
 public class AsyncScalr {
+	/**
+	 * System property name used to set the number of threads the default
+	 * underlying {@link ExecutorService} will use to process async image
+	 * operations.
+	 * <p/>
+	 * Value is "<code>imgscalr.async.threadCount</code>".
+	 */
 	public static final String THREAD_COUNT_PROPERTY_NAME = "imgscalr.async.threadCount";
 
 	/**
@@ -174,8 +181,8 @@ public class AsyncScalr {
 	 * simultaneously execute scale requests.
 	 * <p/>
 	 * This value can be changed by setting the
-	 * <code>imgscalr.async.threadCount</code> system property to a valid
-	 * integer value &gt; 0.
+	 * <code>imgscalr.async.threadCount</code> system property (see
+	 * {@link #THREAD_COUNT_PROPERTY_NAME}) to a valid integer value &gt; 0.
 	 * <p/>
 	 * Default value is <code>2</code>.
 	 */
