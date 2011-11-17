@@ -44,4 +44,11 @@ public class ScalrRotateTest extends AbstractScalrTest {
 		assertEquals(load("time-square-rotate-vert.png"),
 				Scalr.rotate(load("time-square.png"), Rotation.FLIP_VERT));
 	}
+
+	@Test
+	public void testRotateFlipHOps() {
+		assertEquals(load("time-square-rotate-horz-ops.png"),
+				Scalr.rotate(load("time-square.png"), Rotation.FLIP_HORZ,
+						Scalr.OP_GRAYSCALE));
+	}
 }
