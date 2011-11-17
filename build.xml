@@ -60,7 +60,7 @@ limitations under the License.
 					footer="Copyright 2011 The Buzz Media, LLC" 
 					link="${javadoc.link.url}" 
 					linksource="true" 
-					package="true" 
+					public="true"
 					source="${java.req.version}" 
 					use="true">
 			<sourcepath path="${dir.src}" />
