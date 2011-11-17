@@ -56,7 +56,7 @@ public abstract class AbstractScalrTest {
 		int w = orig.getWidth();
 		int h = orig.getHeight();
 
-		// Ensure every pixel RGB is the same.
+		// Ensure every RGB pixel value is the same.
 		for (int i = 0; i < w; i++) {
 			for (int j = 0; j < h; j++) {
 				Assert.assertEquals(orig.getRGB(i, j), tmp.getRGB(i, j));
