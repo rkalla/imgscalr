@@ -69,7 +69,6 @@ limitations under the License.
 
 	<target name="jar" depends="compile">
 		<jar 
-			manifest="${dir.bin}/META-INF/MANIFEST.MF" 
 			basedir="${dir.bin}" 
 			destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.jar" 
 			compress="no" />
