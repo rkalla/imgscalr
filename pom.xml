@@ -9,7 +9,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.imgscalr</groupId>
 	<artifactId>imgscalr-lib</artifactId>
-	<version>4.1-SNAPSHOT</version>
+	<version>4.1</version>
 	<packaging>jar</packaging>
 
 	<name>imgscalr - A Java Image Scaling Library</name>
