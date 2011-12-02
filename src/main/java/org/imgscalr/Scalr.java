@@ -345,7 +345,7 @@ public class Scalr {
 	 * class.
 	 */
 	static {
-		log(0, null, "Debug output ENABLED");
+		log(0, "Debug output ENABLED");
 	}
 
 	/**
