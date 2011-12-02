@@ -9,6 +9,12 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
+4.1
+	* Fixed NullPointerException that occurred when debugging was enabled
+	https://github.com/thebuzzmedia/imgscalr/issues/60
+	
+	Required a patch-release due to the show-stopping nature of the bug.
+
 4.0
 	* [BREAKING] Package has changed from com.thebuzzmedia.imgscalr to 
 	org.imgscalr - I am sorry for the inconvenience of this, but this is
