@@ -2166,6 +2166,9 @@ public class Scalr {
 		int currentHeight = src.getHeight();
 
 		do {
+			int origCurrentWidth = currentWidth;
+			int origCurrentHeight = currentHeight;
+
 			/*
 			 * If the current width is bigger than our target, cut it in half
 			 * and sample again.
@@ -2197,6 +2200,10 @@ public class Scalr {
 				if (currentHeight < targetHeight)
 					currentHeight = targetHeight;
 			}
+
+			if (DEBUG)
+				log(2, "Scaling from [%d x %d] to [%d x %d]", origCurrentWidth,
+						origCurrentHeight, currentWidth, currentHeight);
 
 			// Render the incremental scaled image.
 			BufferedImage incrementalImage = scaleImage(src, currentWidth,
