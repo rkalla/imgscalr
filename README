@@ -9,6 +9,20 @@ http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
 
 Changelog
 ---------
+4.2
+	* Added support for a new Method.ULTRA_QUALITY scaling method.
+	
+	This new method uses 3.5x more incremental steps when scaling an image down
+	than the QUALITY method, providing a much more accurate result. This is
+	especially noticeable in thumbnails that have diagonal lines that get jagged
+	during down-sizing with QUALITY or lower methods.
+	
+	The quality of the ULTRA_QUALITY scaling method is almost on par with the
+	image resize functionality built into Mac OS X; that is to say it is better
+	than GIMP's Lancsoz3 and Windows 7 built-in resize.
+	
+	https://github.com/thebuzzmedia/imgscalr/issues/61
+
 4.1
 	* Fixed NullPointerException that occurred when debugging was enabled
 	https://github.com/thebuzzmedia/imgscalr/issues/60
