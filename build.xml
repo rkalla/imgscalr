@@ -23,7 +23,7 @@ limitations under the License.
 	<property name="javadoc.link.url" value="http://download.oracle.com/javase/6/docs/api/" />
 	
 	<property name="version.major" value="4" />
-	<property name="version.minor" value="1" />
+	<property name="version.minor" value="2" />
 
 	<property name="name.file" value="imgscalr-lib" />
 	<property name="name.file.javadoc" value="${name.file}-${version.major}.${version.minor}-javadoc.jar" />

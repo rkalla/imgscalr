@@ -22,6 +22,17 @@ Changelog
 	than GIMP's Lancsoz3 and Windows 7 built-in resize.
 	
 	https://github.com/thebuzzmedia/imgscalr/issues/61
+	
+	* Fixed subtle bug with incremental scaling and Mode.FIT_EXACT causing the
+	incremental scaling to stop too soon resulting in the wrong-sized result
+	image.
+	
+	The stop-condition for incremental scaling assumed that in every case the
+	width AND height would be shrinking each iteration; when using 
+	Mode.FIT_EXACT this is not necessarily true as one dimension may not change
+	at all or stop changing before another.
+	
+	https://github.com/thebuzzmedia/imgscalr/issues/65 
 
 4.1
 	* Fixed NullPointerException that occurred when debugging was enabled
