@@ -93,6 +93,7 @@ public class ScalrResizeTest extends AbstractScalrTest {
 
 	@Test
 	public void testResizeSizeExact() {
+		System.setProperty(Scalr.DEBUG_PROPERTY_NAME, "true");
 		assertEquals(load("time-square-resize-320-fit-exact.png"),
 				Scalr.resize(src, Mode.FIT_EXACT, 320));
 	}
@@ -133,5 +134,14 @@ public class ScalrResizeTest extends AbstractScalrTest {
 		// forever because of the fractional step-down calculation bottoming
 		// out.
 		Assert.assertTrue(true);
+	}
+	
+	@Test
+	public void testResizeFitExact() {
+		BufferedImage i = new BufferedImage(500, 500, BufferedImage.TYPE_INT_RGB);
+		BufferedImage i2 = Scalr.resize(i, Mode.FIT_EXACT, 500, 250);
+		
+		Assert.assertEquals(i2.getWidth(), 500);
+		Assert.assertEquals(i2.getHeight(), 250);
 	}
 }

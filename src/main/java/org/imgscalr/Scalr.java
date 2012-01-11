@@ -2251,9 +2251,20 @@ public class Scalr {
 					currentHeight = targetHeight;
 			}
 
-			// Stop when we cannot incrementally step down anymore.
+			/*
+			 * Stop when we cannot incrementally step down anymore.
+			 * 
+			 * This used to use a || condition, but that would cause problems
+			 * when using FIT_EXACT such that sometimes the width OR height
+			 * would not change between iterations, but the other dimension
+			 * would (e.g. resizing 500x500 to 500x250).
+			 * 
+			 * Now changing this to an && condition requires that both
+			 * dimensions do not change between a resize iteration before we
+			 * consider ourselves done.
+			 */
 			if (prevCurrentWidth == currentWidth
-					|| prevCurrentHeight == currentHeight)
+					&& prevCurrentHeight == currentHeight)
 				break;
 
 			if (DEBUG)
