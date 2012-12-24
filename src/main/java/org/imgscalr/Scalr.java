@@ -1046,7 +1046,10 @@ public class Scalr {
 
 		// "Clear" the background of the new image with our padding color first.
 		g.setColor(color);
-		g.fillRect(0, 0, newWidth, newHeight);
+		g.fillRect(0, 0, newWidth, padding);
+		g.fillRect(0, padding, padding, newHeight);
+		g.fillRect(padding, newHeight - padding, newWidth, newHeight);
+		g.fillRect(newWidth - padding, padding, newWidth, newHeight - padding);
 
 		// Draw the image into the center of the new padded image.
 		g.drawImage(src, padding, padding, null);
