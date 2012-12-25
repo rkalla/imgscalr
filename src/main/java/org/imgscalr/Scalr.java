@@ -1044,7 +1044,7 @@ public class Scalr {
 
 		Graphics g = result.getGraphics();
 
-		// Draw the color around the border of the new image.
+		// Draw the color in the padded area around the image.
 		g.setColor(color);
 		g.fillRect(0, 0, newWidth, padding);
 		g.fillRect(0, padding, padding, newHeight);
