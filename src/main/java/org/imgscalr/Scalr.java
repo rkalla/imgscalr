@@ -1560,104 +1560,143 @@ public class Scalr {
 			ImagingOpException {
 		long t = System.currentTimeMillis();
 
-		if (src == null)
-			throw new IllegalArgumentException("src cannot be null");
-		if (targetWidth < 0)
-			throw new IllegalArgumentException("targetWidth must be >= 0");
-		if (targetHeight < 0)
-			throw new IllegalArgumentException("targetHeight must be >= 0");
-		if (scalingMethod == null)
-			throw new IllegalArgumentException(
-					"scalingMethod cannot be null. A good default value is Method.AUTOMATIC.");
-		if (resizeMode == null)
-			throw new IllegalArgumentException(
-					"resizeMode cannot be null. A good default value is Mode.AUTOMATIC.");
+		if (src == null) {
+					throw new IllegalArgumentException("src cannot be null");
+				}
+		if (targetWidth < 0) {
+					throw new IllegalArgumentException("targetWidth must be >= 0");
+				}
+		if (targetHeight < 0) {
+					throw new IllegalArgumentException("targetHeight must be >= 0");
+				}
+		if (scalingMethod == null) {
+					throw new IllegalArgumentException(
+							"scalingMethod cannot be null. A good default value is Method.AUTOMATIC.");
+				}
+		if (resizeMode == null) {
+					throw new IllegalArgumentException(
+							"resizeMode cannot be null. A good default value is Mode.AUTOMATIC.");
+				}
 
 		BufferedImage result = null;
+		float ratio = ((float) src.getHeight() / (float) src.getWidth());
 
-		int currentWidth = src.getWidth();
-		int currentHeight = src.getHeight();
+		if (DEBUG) {
+					log(0,
+							"Resizing Image [size=%dx%d, resizeMode=%s, orientation=%s, ratio(H/W)=%f] to [targetSize=%dx%d]",
+							src.getWidth(), src.getHeight(), resizeMode,
+							(ratio <= 1 ? "Landscape/Square" : "Portrait"), ratio,
+							targetWidth, targetHeight);
+				}
 
-		// <= 1 is a square or landscape-oriented image, > 1 is a portrait.
-		float ratio = ((float) currentHeight / (float) currentWidth);
-
-		if (DEBUG)
-			log(0,
-					"Resizing Image [size=%dx%d, resizeMode=%s, orientation=%s, ratio(H/W)=%f] to [targetSize=%dx%d]",
-					currentWidth, currentHeight, resizeMode,
-					(ratio <= 1 ? "Landscape/Square" : "Portrait"), ratio,
-					targetWidth, targetHeight);
+		// Save for detailed logging (this is cheap).
+		int originalTargetWidth = targetWidth;
+		int originalTargetHeight = targetHeight;
 
 		/*
-		 * First determine if ANY size calculation needs to be done, in the case
-		 * of FIT_EXACT, ignore image proportions and orientation and just use
-		 * what the user sent in, otherwise the proportion of the picture must
-		 * be honored.
-		 * 
-		 * The way that is done is to figure out if the image is in a
-		 * LANDSCAPE/SQUARE or PORTRAIT orientation and depending on its
-		 * orientation, use the primary dimension (width for LANDSCAPE/SQUARE
-		 * and height for PORTRAIT) to recalculate the alternative (height and
-		 * width respectively) value that adheres to the existing ratio.
-		 * 
-		 * This helps make life easier for the caller as they don't need to
-		 * pre-compute proportional dimensions before calling the API, they can
-		 * just specify the dimensions they would like the image to roughly fit
-		 * within and it will do the right thing without mangling the result.
+		 * Calculate target dimensions 
 		 */
-		if (resizeMode != Mode.FIT_EXACT) {
-			if ((ratio <= 1 && resizeMode == Mode.AUTOMATIC)
-					|| (resizeMode == Mode.FIT_TO_WIDTH)) {
+		switch (resizeMode) {
+			/*
+			 * Fit into target size:  Calculate resize rations for both dimension
+			 * and choose the smaller one. Recalculate the other dimension with
+			 * this resize ratio.
+			 */
+			case AUTOMATIC:
+				float widthResizeRatio = (float) targetWidth / (float) src.getWidth();
+				float heightResizeRatio = (float) targetHeight / (float) src.getHeight();
+
 				// First make sure we need to do any work in the first place
-				if (targetWidth == src.getWidth())
+				if (Math.min(widthResizeRatio, heightResizeRatio) == 1) {
 					return src;
+				}
+				
+				if (widthResizeRatio <= heightResizeRatio) {
+					targetHeight = Math.round(src.getHeight() * widthResizeRatio);
+				} else {
+					targetWidth = Math.round(src.getWidth() * heightResizeRatio);
+				}
 
-				// Save for detailed logging (this is cheap).
-				int originalTargetHeight = targetHeight;
+				if (DEBUG) {
+						if (originalTargetHeight != targetWidth) {
+							log(1,
+								"Auto-Corrected targetWidth [from=%d to=%d] to honor image proportions.",
+								src.getWidth(), targetWidth);
+						}
+						if (originalTargetWidth != targetWidth) {
+							log(1,
+								"Auto-Corrected targetHeight [from=%d to=%d] to honor image proportions.",
+								src.getHeight(), targetHeight);
+						}
+				}
+				break;
 
-				/*
-				 * Landscape or Square Orientation: Ignore the given height and
-				 * re-calculate a proportionally correct value based on the
-				 * targetWidth.
-				 */
-				targetHeight = Math.round((float) targetWidth * ratio);
-
-				if (DEBUG && originalTargetHeight != targetHeight)
-					log(1,
-							"Auto-Corrected targetHeight [from=%d to=%d] to honor image proportions.",
-							originalTargetHeight, targetHeight);
-			} else {
+			/*
+			 * Fit to height: Calculate a resize value based on the targetHeight.
+			 */
+			case FIT_TO_HEIGHT:
 				// First make sure we need to do any work in the first place
-				if (targetHeight == src.getHeight())
+				if (targetHeight == src.getHeight()) {
 					return src;
+				}
 
-				// Save for detailed logging (this is cheap).
-				int originalTargetWidth = targetWidth;
+				targetWidth = Math.round(((float) targetHeight / (float) src.getHeight()) * (float) src.getWidth());
 
-				/*
-				 * Portrait Orientation: Ignore the given width and re-calculate
-				 * a proportionally correct value based on the targetHeight.
-				 */
-				targetWidth = Math.round((float) targetHeight / ratio);
-
-				if (DEBUG && originalTargetWidth != targetWidth)
-					log(1,
+				if (DEBUG && originalTargetWidth != targetWidth) {
+						log(1,
 							"Auto-Corrected targetWidth [from=%d to=%d] to honor image proportions.",
-							originalTargetWidth, targetWidth);
-			}
-		} else {
-			if (DEBUG)
-				log(1,
+							src.getWidth(), targetWidth);
+				}
+				break;
+
+			/*
+			 * Fit to width: Calculate a resize value based on the targetWidth.
+			 */
+			case FIT_TO_WIDTH:
+				// First make sure we need to do any work in the first place
+				if (targetWidth == src.getWidth()) {
+					return src;
+				}
+
+				targetHeight = Math.round(((float) targetWidth / (float) src.getWidth()) * (float) src.getHeight());
+
+				if (DEBUG && originalTargetHeight != targetHeight) {
+						log(1,
+							"Auto-Corrected targetHeight [from=%d to=%d] to honor image proportions.",
+							 src.getHeight(), targetHeight);
+				}
+				break;
+
+			/*
+			 * Fit exact: Do not honor image proportions.
+			 */
+			case FIT_EXACT:
+				// First make sure we need to do any work in the first place
+				if (targetWidth == src.getWidth() && targetHeight == src.getHeight()) {
+					return src;
+				}
+				if (DEBUG) {
+					log(1,
 						"Resize Mode FIT_EXACT used, no width/height checking or re-calculation will be done.");
+				}
+				break;
+
+			/*
+			* If get here, the mode unrecognized, so do nothing
+			*/
+			default:
+				return src;
 		}
-
+	
 		// If AUTOMATIC was specified, determine the real scaling method.
-		if (scalingMethod == Scalr.Method.AUTOMATIC)
-			scalingMethod = determineScalingMethod(targetWidth, targetHeight,
-					ratio);
+		if (scalingMethod == Scalr.Method.AUTOMATIC) {
+					scalingMethod = determineScalingMethod(targetWidth, targetHeight,
+							ratio);
+				}
 
-		if (DEBUG)
-			log(1, "Using Scaling Method: %s", scalingMethod);
+		if (DEBUG) {
+					log(1, "Using Scaling Method: %s", scalingMethod);
+				}
 
 		// Now we scale the image
 		if (scalingMethod == Scalr.Method.SPEED) {
@@ -1678,10 +1717,11 @@ public class Scalr {
 			 * If we are scaling down, we must use the incremental scaling
 			 * algorithm for the best result.
 			 */
-			if (targetWidth > currentWidth || targetHeight > currentHeight) {
-				if (DEBUG)
+			if (targetWidth > src.getWidth() || targetHeight > src.getHeight()) {
+				if (DEBUG) {
 					log(1,
 							"QUALITY scale-up, a single BICUBIC scale operation will be used...");
+				}
 
 				/*
 				 * BILINEAR and BICUBIC look similar the smaller the scale jump
@@ -1694,9 +1734,10 @@ public class Scalr {
 				result = scaleImage(src, targetWidth, targetHeight,
 						RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 			} else {
-				if (DEBUG)
+				if (DEBUG) {
 					log(1,
 							"QUALITY scale-down, incremental scaling will be used...");
+				}
 
 				/*
 				 * Originally we wanted to use BILINEAR interpolation here
@@ -1714,12 +1755,14 @@ public class Scalr {
 			}
 		}
 
-		if (DEBUG)
-			log(0, "Resized Image in %d ms", System.currentTimeMillis() - t);
+		if (DEBUG) {
+					log(0, "Resized Image in %d ms", System.currentTimeMillis() - t);
+				}
 
 		// Apply any optional operations (if specified).
-		if (ops != null && ops.length > 0)
-			result = apply(result, ops);
+		if (ops != null && ops.length > 0) {
+					result = apply(result, ops);
+				}
 
 		return result;
 	}
