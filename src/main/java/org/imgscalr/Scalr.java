@@ -608,7 +608,9 @@ public class Scalr {
 	 */
 	public static BufferedImage apply(BufferedImage src, BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		long t = System.currentTimeMillis();
+	  long t = -1;
+	  if (DEBUG)
+	    t = System.currentTimeMillis();
 
 		if (src == null)
 			throw new IllegalArgumentException("src cannot be null");
@@ -652,7 +654,9 @@ public class Scalr {
 		boolean hasReassignedSrc = false;
 
 		for (int i = 0; i < ops.length; i++) {
-			long subT = System.currentTimeMillis();
+      long subT = -1;
+      if (DEBUG)
+        subT = System.currentTimeMillis();
 			BufferedImageOp op = ops[i];
 
 			// Skip null ops instead of throwing an exception.
@@ -830,7 +834,9 @@ public class Scalr {
 	public static BufferedImage crop(BufferedImage src, int x, int y,
 			int width, int height, BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		long t = System.currentTimeMillis();
+    long t = -1;
+    if (DEBUG)
+      t = System.currentTimeMillis();
 
 		if (src == null)
 			throw new IllegalArgumentException("src cannot be null");
@@ -988,7 +994,9 @@ public class Scalr {
 	public static BufferedImage pad(BufferedImage src, int padding,
 			Color color, BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
-		long t = System.currentTimeMillis();
+    long t = -1;
+    if (DEBUG)
+      t = System.currentTimeMillis();
 
 		if (src == null)
 			throw new IllegalArgumentException("src cannot be null");
@@ -1558,7 +1566,9 @@ public class Scalr {
 			Mode resizeMode, int targetWidth, int targetHeight,
 			BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		long t = System.currentTimeMillis();
+    long t = -1;
+    if (DEBUG)
+      t = System.currentTimeMillis();
 
 		if (src == null)
 			throw new IllegalArgumentException("src cannot be null");
@@ -1766,7 +1776,9 @@ public class Scalr {
 	public static BufferedImage rotate(BufferedImage src, Rotation rotation,
 			BufferedImageOp... ops) throws IllegalArgumentException,
 			ImagingOpException {
-		long t = System.currentTimeMillis();
+    long t = -1;
+    if (DEBUG)
+      t = System.currentTimeMillis();
 
 		if (src == null)
 			throw new IllegalArgumentException("src cannot be null");
