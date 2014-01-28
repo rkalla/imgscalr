@@ -159,4 +159,56 @@ public class ScalrResizeTest extends AbstractScalrTest {
 		Assert.assertEquals(i2.getWidth(), 500);
 		Assert.assertEquals(i2.getHeight(), 250);
 	}
+
+    @Test
+    public void testResizeAutoVsFitBoth() {
+        // FitBoth will not allow the minor axis to grow beyond the specified box. The four commented
+        // tests show how this interacts
+
+        // For landscape images, AUTO will let targetWidth decide scaling, even if targetHeight is violated
+        BufferedImage landscape = new BufferedImage(500, 250, BufferedImage.TYPE_INT_RGB);
+        testResizeAutoVsBoth(landscape, 500, 250, 500, 250, 500, 250);
+        testResizeAutoVsBoth(landscape, 500, 500, 500, 250, 500, 250);
+
+        testResizeAutoVsBoth(landscape, 800, 300, 800, 400, 600, 300);  // FitBoth restricts y to 300, and adjusts x
+        testResizeAutoVsBoth(landscape, 800, 400, 800, 400, 800, 400);
+        testResizeAutoVsBoth(landscape, 800, 500, 800, 400, 800, 400);
+
+        testResizeAutoVsBoth(landscape, 250, 150, 250, 125, 250, 125);
+        testResizeAutoVsBoth(landscape, 250, 125, 250, 125, 250, 125);
+        testResizeAutoVsBoth(landscape, 250, 100, 250, 125, 200, 100);  // FitBoth imposes smaller y, and adjusts x
+
+        // For portrait images, AUTO will let targetHeight decide scaling, even if targetWidth is violated
+        BufferedImage portrait = new BufferedImage(250, 500, BufferedImage.TYPE_INT_RGB);
+        testResizeAutoVsBoth(portrait, 250, 500, 250, 500, 250, 500);
+        testResizeAutoVsBoth(portrait, 500, 500, 250, 500, 250, 500);
+
+        testResizeAutoVsBoth(portrait, 300, 800, 400, 800, 300, 600);   // FitBoth restricts x to 800, and adjusts y
+        testResizeAutoVsBoth(portrait, 400, 800, 400, 800, 400, 800);
+        testResizeAutoVsBoth(portrait, 500, 800, 400, 800, 400, 800);
+
+        testResizeAutoVsBoth(portrait, 150, 250, 125, 250, 125, 250);
+        testResizeAutoVsBoth(portrait, 125, 250, 125, 250, 125, 250);
+        testResizeAutoVsBoth(portrait, 100, 250, 125, 250, 100, 200);   // FitBoth imposes smaller xj, and adjusts y
+
+        // Squares are treated as a landscape
+        BufferedImage square = new BufferedImage(500, 500, BufferedImage.TYPE_INT_RGB);
+        testResizeAutoVsBoth(square, 500, 500, 500, 500, 500, 500);
+        testResizeAutoVsBoth(square, 800, 800, 800, 800, 800, 800);
+        testResizeAutoVsBoth(square, 400, 400, 400, 400, 400, 400);
+        testResizeAutoVsBoth(square, 800, 600, 800, 800, 600, 600);     // FixBoth restricts both dimensions
+
+    }
+
+    // resize to (w,h) using AUTO and FIT_BOTH modes, then compare auto (w,h) and fitBoth (w,h)
+    private void testResizeAutoVsBoth (BufferedImage i, int targetWidth, int targetHeight, int autoWidth, int autoHeight, int fitBothWidth, int fitBothHeight) {
+        BufferedImage auto = Scalr.resize(i, Mode.AUTOMATIC, targetWidth, targetHeight);
+        BufferedImage fitBoth = Scalr.resize(i, Mode.BEST_FIT_BOTH, targetWidth, targetHeight);
+
+        Assert.assertEquals (autoWidth, auto.getWidth());
+        Assert.assertEquals(autoHeight, auto.getHeight());
+
+        Assert.assertEquals(fitBothWidth, fitBoth.getWidth());
+        Assert.assertEquals(fitBothHeight, fitBoth.getHeight());
+    }
 }
