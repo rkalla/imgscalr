@@ -446,6 +446,12 @@ public class Scalr {
 		FIT_EXACT,
 		/**
 		 * Used to indicate that the scaling implementation should calculate
+		 * dimensions for the largest image that fit within the bounding box,
+		 * without cropping or distortion, retaining the original proportions.
+		 */
+		BEST_FIT_BOTH,
+		/**
+		 * Used to indicate that the scaling implementation should calculate
 		 * dimensions for the resultant image that best-fit within the given
 		 * width, regardless of the orientation of the image.
 		 */
@@ -1615,7 +1621,24 @@ public class Scalr {
 		 * just specify the dimensions they would like the image to roughly fit
 		 * within and it will do the right thing without mangling the result.
 		 */
-		if (resizeMode != Mode.FIT_EXACT) {
+		if (resizeMode == Mode.FIT_EXACT) {
+			if (DEBUG)
+				log(1,
+						"Resize Mode FIT_EXACT used, no width/height checking or re-calculation will be done.");
+		} else if (resizeMode == Mode.BEST_FIT_BOTH) {
+			float requestedHeightScaling = ((float) targetHeight / (float) currentHeight);
+			float requestedWidthScaling = ((float) targetWidth / (float) currentWidth);
+			float actualScaling = Math.min(requestedHeightScaling, requestedWidthScaling);
+
+			targetHeight = Math.round((float) currentHeight * actualScaling);
+			targetWidth = Math.round((float) currentWidth * actualScaling);
+
+			if (targetHeight == currentHeight && targetWidth == currentWidth)
+				return src;
+
+			if (DEBUG)
+				log(1, "Auto-Corrected width and height based on scalingRatio %d.", actualScaling);
+		} else {
 			if ((ratio <= 1 && resizeMode == Mode.AUTOMATIC)
 					|| (resizeMode == Mode.FIT_TO_WIDTH)) {
 				// First make sure we need to do any work in the first place
@@ -1655,10 +1678,6 @@ public class Scalr {
 							"Auto-Corrected targetWidth [from=%d to=%d] to honor image proportions.",
 							originalTargetWidth, targetWidth);
 			}
-		} else {
-			if (DEBUG)
-				log(1,
-						"Resize Mode FIT_EXACT used, no width/height checking or re-calculation will be done.");
 		}
 
 		// If AUTOMATIC was specified, determine the real scaling method.
