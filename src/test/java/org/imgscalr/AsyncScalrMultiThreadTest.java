@@ -45,9 +45,15 @@ public class AsyncScalrMultiThreadTest extends AbstractScalrTest {
 			if (i % 100 == 0)
 				System.out.println("Scale Iteration " + i);
 
-			Thread t = new ScaleThread();
-			t.start();
-			threadList.add(t);
+			try {
+				Thread t = new ScaleThread();
+				t.start();
+				threadList.add(t);
+			} catch (OutOfMemoryError error) {
+				System.out.println("Cannot create any more threads, last created was " + i);
+				ITERS = i;
+				break;
+			}
 		}
 		
 		// Now wait for all the threads to finish
