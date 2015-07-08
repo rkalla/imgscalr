@@ -1857,7 +1857,7 @@ public class Scalr {
 
 			// Reminder: newWidth == result.getHeight() at this point
 			tx.translate(newWidth, 0);
-			tx.rotate(Math.toRadians(90));
+			tx.quadrantRotate(1);
 
 			break;
 
@@ -1871,12 +1871,12 @@ public class Scalr {
 
 			// Reminder: newHeight == result.getWidth() at this point
 			tx.translate(0, newHeight);
-			tx.rotate(Math.toRadians(-90));
+			tx.quadrantRotate(3);
 			break;
 
 		case CW_180:
 			tx.translate(newWidth, newHeight);
-			tx.rotate(Math.toRadians(180));
+			tx.quadrantRotate(2);
 			break;
 
 		case FLIP_HORZ:
