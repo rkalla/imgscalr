@@ -1653,7 +1653,7 @@ public class Scalr {
 				 * re-calculate a proportionally correct value based on the
 				 * targetWidth.
 				 */
-				targetHeight = Math.round((float) targetWidth * ratio);
+				targetHeight = (int)Math.ceil((float) targetWidth * ratio);
 
 				if (DEBUG && originalTargetHeight != targetHeight)
 					log(1,
