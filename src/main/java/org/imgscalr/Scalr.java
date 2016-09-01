@@ -2030,9 +2030,9 @@ public class Scalr {
 	 */
 	protected static BufferedImage createOptimalImage(BufferedImage src,
 			int width, int height) throws IllegalArgumentException {
-		if (width < 0 || height < 0)
+		if (width <= 0 || height <= 0)
 			throw new IllegalArgumentException("width [" + width
-					+ "] and height [" + height + "] must be >= 0");
+					+ "] and height [" + height + "] must be > 0");
 
 		return new BufferedImage(
 				width,
