@@ -997,6 +997,98 @@ public class Scalr {
 	 *             to fail, even when using straight forward JDK-image
 	 *             operations.
 	 */
+	public static BufferedImage pad(BufferedImage src, int verticalPadding, int horizontalPadding, Color color, BufferedImageOp... ops) {
+		long t = -1;
+		
+	    if (DEBUG)
+    	  t = System.currentTimeMillis();
+
+		if (src == null)
+			throw new IllegalArgumentException("src cannot be null");
+		if (horizontalPadding < 0)
+			throw new IllegalArgumentException("horizontalPadding [" + horizontalPadding + "] must be >= 0");
+		if (verticalPadding < 0)
+			throw new IllegalArgumentException("verticalPadding [" + verticalPadding + "] must be >= 0");
+		if (color == null)
+			throw new IllegalArgumentException("color cannot be null");
+
+		int srcWidth = src.getWidth();
+		int srcHeight = src.getHeight();
+
+		/*
+		 * Double the padding to account for all sides of the image. More
+		 * specifically, if padding is "1" we add 2 pixels to width and 2 to
+		 * height, so we have 1 new pixel of padding all the way around our
+		 * image.
+		 */
+		// int sizeDiff = (padding * 2);
+		int newWidth = srcWidth + (horizontalPadding*2);
+		int newHeight = srcHeight + (verticalPadding*2);
+
+		// if (DEBUG)
+		// 	log(0,
+		// 			"Padding Image from [originalWidth=%d, originalHeight=%d, padding=%d] to [newWidth=%d, newHeight=%d]...",
+		// 			srcWidth, srcHeight, padding, newWidth, newHeight);
+
+		boolean colorHasAlpha = (color.getAlpha() != 255);
+		boolean imageHasAlpha = (src.getTransparency() != BufferedImage.OPAQUE);
+
+		BufferedImage result;
+
+		/*
+		 * We need to make sure our resulting image that we render into contains
+		 * alpha if either our original image OR the padding color we are using
+		 * contain it.
+		 */
+		if (colorHasAlpha || imageHasAlpha) {
+			if (DEBUG)
+				log(1,
+						"Transparency FOUND in source image or color, using ARGB image type...");
+
+			result = new BufferedImage(newWidth, newHeight,
+					BufferedImage.TYPE_INT_ARGB);
+		} else {
+			if (DEBUG)
+				log(1,
+						"Transparency NOT FOUND in source image or color, using RGB image type...");
+
+			result = new BufferedImage(newWidth, newHeight,
+					BufferedImage.TYPE_INT_RGB);
+		}
+
+		Graphics g = result.getGraphics();
+
+		// Draw the border of the image in the color specified.
+		g.setColor(color);
+
+		// g.fillRect(int x, int y, int width, int height)
+
+		//g.fillRect(0, 0, newWidth, padding);
+		g.fillRect(0, 0, newWidth, verticalPadding);
+
+		// g.fillRect(0, padding, padding, newHeight);
+		g.fillRect(0, verticalPadding, horizontalPadding, newHeight);
+
+		// g.fillRect(padding, newHeight - padding, newWidth, newHeight);
+		g.fillRect(horizontalPadding, newHeight - verticalPadding, newWidth, newHeight);
+
+		// g.fillRect(newWidth - padding, padding, newWidth, newHeight - padding);
+		g.fillRect(newWidth - horizontalPadding, verticalPadding, newWidth, newHeight - verticalPadding);
+
+		// Draw the image into the center of the new padded image.
+		g.drawImage(src, horizontalPadding, verticalPadding, null);
+		g.dispose();
+
+		// if (DEBUG)
+		// 	log(0, "Padding Applied in %d ms", System.currentTimeMillis() - t);
+
+		// Apply any optional operations (if specified).
+		if (ops != null && ops.length > 0)
+			result = apply(result, ops);
+
+		return result;
+	}
+
 	public static BufferedImage pad(BufferedImage src, int padding,
 			Color color, BufferedImageOp... ops)
 			throws IllegalArgumentException, ImagingOpException {
@@ -1007,8 +1099,7 @@ public class Scalr {
 		if (src == null)
 			throw new IllegalArgumentException("src cannot be null");
 		if (padding < 1)
-			throw new IllegalArgumentException("padding [" + padding
-					+ "] must be > 0");
+			throw new IllegalArgumentException("padding [" + padding + "] must be > 0");
 		if (color == null)
 			throw new IllegalArgumentException("color cannot be null");
 
