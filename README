@@ -14,7 +14,7 @@ Changelog
 	image resize functionality built into Mac OS X; that is to say it is better
 	than GIMP's Lancsoz3 and Windows 7 built-in resize.
 	
-	https://github.com/thebuzzmedia/imgscalr/issues/61
+	https://github.com/rkalla/imgscalr/issues/61
 	
 	* Fixed subtle bug with incremental scaling and Mode.FIT_EXACT causing the
 	incremental scaling to stop too soon resulting in the wrong-sized result
@@ -25,11 +25,11 @@ Changelog
 	Mode.FIT_EXACT this is not necessarily true as one dimension may not change
 	at all or stop changing before another.
 	
-	https://github.com/thebuzzmedia/imgscalr/issues/65 
+	https://github.com/rkalla/imgscalr/issues/65 
 
 4.1
 	* Fixed NullPointerException that occurred when debugging was enabled
-	https://github.com/thebuzzmedia/imgscalr/issues/60
+	https://github.com/rkalla/imgscalr/issues/60
 	
 	Required a patch-release due to the show-stopping nature of the bug.
 
@@ -238,7 +238,7 @@ Changelog
 	* Workaround for a 10-year-old JDK bug that causes RasterExceptions to get
 	thrown from inside of Java2D when using BufferedImageOps was built directly
 	into imgscalr so you don't have to worry about RasterExceptions. More
-	info here: https://github.com/thebuzzmedia/imgscalr/issues/closed#issue/23
+	info here: https://github.com/rkalla/imgscalr/issues/closed#issue/23
 	
 	* API was made more strict and an IAE is thrown if 'src' is null to any of
 	the resize operations; a user reported that he spent a while debugging why
@@ -314,7 +314,7 @@ Changelog
 	* Copious amounts of Javadoc added to new methods, new code and existing code. 
 	
 	Issues Resolved in 2.0:
-	https://github.com/thebuzzmedia/imgscalr/issues/closed
+	https://github.com/rkalla/imgscalr/issues/closed
 
 1.2
 	* Default proportional-scaling logic is more straight forward. If an image is
@@ -326,15 +326,8 @@ Changelog
 	
 	* Modified build.xml to output Maven-friendly artifact names.
 	
-	* Library now available from the http://maven.thebuzzmedia.com Maven repo, see
-	"Maven" section on this page for more information:
-	http://www.thebuzzmedia.com/software/imgscalr-java-image-scaling-library/
-	
-	* Javadoc is now available on the web at:
-	http://www.thebuzzmedia.com/downloads/software/imgscalr/javadoc/index.html
-	
 	Issues Resolved in 1.2:
-	https://github.com/thebuzzmedia/imgscalr/issues/closed
+	https://github.com/rkalla/imgscalr/issues/closed
 
 1.1
 	* Initial public release.
@@ -447,10 +440,4 @@ Chris Campbell Incremental Scaling - http://today.java.net/pub/a/today/2007/04/0
 
 Related Projects
 ----------------
-ExifTool for Java - http://www.thebuzzmedia.com/software/exiftool-enhanced-java-integration-for-exiftool/
-
-
-Contact
--------
-If you have questions, comments or bug reports for this software please contact
-us at: software@thebuzzmedia.com
+ExifTool for Java - https://github.com/rkalla/exiftool
