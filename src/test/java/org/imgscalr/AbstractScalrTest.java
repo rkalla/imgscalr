@@ -1,5 +1,5 @@
 /**   
- * Copyright 2011 The Buzz Media, LLC
+ * Copyright 2011 Riyad Kalla
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
