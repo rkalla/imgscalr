@@ -71,7 +71,11 @@ limitations under the License.
 		<jar 
 			basedir="${dir.bin}" 
 			destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.jar" 
-			compress="no" />
+			compress="no">
+			<manifest>
+				<attribute name="Automatic-Module-Name" value="imgscalr.lib" />
+			</manifest>
+		</jar>
 	</target>
 
 	<target name="src">
